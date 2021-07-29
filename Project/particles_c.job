@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --nodes=1                   # nodes 
+#SBATCH --ntasks-per-node=1   # MPI tasks/node
+#SBATCH --cpus-per-task=1     # OpenMP threads/task
+#SBATCH --time=0:30:00        # max 24:00:00
+#SBATCH --mem=3GB           # max memory/node=118GB, 3.5 GB/core
+#SBATCH --account=tra21_polimi     # account name
+#SBATCH --partition=gll_usr_prod     # partition name: XXX=bdw|knl|skl
+#SBATCH --qos=gll_qos_shared
+#SBATCH --job-name=p2D              # job name
+#SBATCH --error=%J.err    # stderr file
+#SBATCH --output=%J.out   # stdout file
+
+echo "Job started at " `date`
+rm *.ppm *.jpg *.dmp *.sta
+module load gnu
+rm *.exe
+gcc -o particles_c.exe -O3 -fbounds-check particles_c.c -lm
+./particles_c.exe
+wait
+echo "Job finished at " `date`
+exit

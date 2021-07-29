@@ -1,0 +1,24 @@
+# Extension of field grid in X, Y directions
+2400
+2000
+# X interval for particle generating field: 0,02373046
+0.42773438
+0.45146484
+# Y interval for particle generating field: 0,020764153
+0.32128906
+0.342053213
+# Extension of particle grid in X, Y directions
+1200
+1000
+# X interval for particle grid
+0.0
+1200.0
+# Y interval for particle grid
+0.0
+1000.0
+# iterations for particle generation
+3000
+# iterations for particle dynamics
+100
+# bit of time for particle dynamics
+0.001

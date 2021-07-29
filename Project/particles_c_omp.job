@@ -1,0 +1,25 @@
+#!/bin/bash
+#PBS -N particles_c_mpi
+#PBS -r n
+#PBS -j oe
+#PBS -l walltime=0:30:00
+#PBS -l select=1:ncpus=16:mpiprocs=16:mem=40gb
+#PBS -A cin_staff
+cd $PBS_O_WORKDIR
+module load autoload intelmpi
+rm -f particles_c_mpi
+mpiicc -O3 -qopenmp particles_c_mpi.c -o particles_c_mpi
+for np in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
+   for nt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
+      c=$(($np*$nt))
+      if [ $c -lt 17 ]; then 
+         export OMP_NUM_THREADS=$nt
+         rm -f *.dppm *.ppm *.dmp *.sta
+         echo "Started with $np processes and $OMP_NUM_THREADS threads at " `date`
+         mpirun -np $np ./particles_c_mpi
+         wait
+         echo "Finished with $np processes and $OMP_NUM_THREADS threads at " `date`
+      fi
+   done
+done
+exit
