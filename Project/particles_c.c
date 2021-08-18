@@ -106,7 +106,7 @@ void ParticleStats(struct Population p, int t) {
     w = xg = yg = 0.0;
     wmin = wmax = p.weight[0];
     for (i = 0; i < p.np; i++) {
-        //TODO: metti tutto in unica funzione computestatsbis
+        //TODO BRUNO: metti tutto in unica funzione computestatsbis
         if (wmin > p.weight[i]) wmin = p.weight[i];
         if (wmax < p.weight[i]) wmax = p.weight[i];
         w = w + p.weight[i];
@@ -494,7 +494,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt) {
     return;
 }
 
-//OPT: test parallelized like min-max vs sequential
+// TODO BRUNO: test parallelized like min-max vs sequential
 void CountPopulation (struct Population *pp){
     int v;
 
@@ -599,7 +599,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         ParticleScreen(pgrid, *pp, t);
         // DumpPopulation call frequency may be changed
         if (t % 4 == 0) DumpPopulation(*pp, t);
-        ParticleStats(*pp, t); //TODO: only one at a time, lock resource
+        ParticleStats(*pp, t);
         SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp, forces);
 
         cudaDeviceSynchronize();
@@ -646,7 +646,7 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population pp, int step) {
     Dx = pgrid->Xe - pgrid->Xs;
     Dy = pgrid->Ye - pgrid->Ys;
 
-    //TODO: check if parallelizable
+    //TODO BRUNO: check if parallelizable
     for (n = 0; n < pp.np; n++) {
         // keep a tiny border free anyway
         ix = Xdots * pp.x[n] / Dx;
