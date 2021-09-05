@@ -496,6 +496,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt) {
 
 //OPT: test parallelized like min-max vs sequential
 void CountPopulation (struct Population *pp){
+    /*
     int v;
 
     for (iy = 0; iy < Ydots; iy++) {
@@ -505,7 +506,7 @@ void CountPopulation (struct Population *pp){
         }
     }
 
-    pp->np = np;
+    pp->np = np;*/
 }
 
 __global__ void ParticleGeneration(struct i2dGrid grid, struct i2dGrid pgrid, struct Population *pp) {
@@ -588,6 +589,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
     double f[2];
     int t;
 
+    int N = (pgrid->EX) * (pgrid-> EY);
     dim3 threads_per_block (16, 16, 1); // TODO: set dimensions of x and y dimensions
     dim3 number_of_blocks ((N / threads_per_block.x) + 1, (N / threads_per_block.y) + 1, 1);
 
