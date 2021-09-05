@@ -62,7 +62,7 @@ struct Population {
     double *weight, *x, *y, *vx, *vy; // particles have a position and few other properties
 } Particles;
 
-void print_Population(struct Population p) {
+__global__ void print_Population(struct Population p) {
     printf("Population: np = %d\n", p.np);
 }
 
@@ -148,7 +148,7 @@ double MaxDoubleVal(int s, double *a);
 
 double MinDoubleVal(int s, double *a);
 
-void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy);
+__global__ void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy);
 
 __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt);
 
@@ -158,9 +158,9 @@ __global__ void ParticleGeneration(struct i2dGrid grid, struct i2dGrid pgrid, st
 
 void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double *forces);
 
-void ForceCompt(double *f, struct particle p1, struct particle p2);
+__global__ void ForceCompt(double *f, struct particle p1, struct particle p2);
 
-void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy) {
+__global__ void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy) {
     /*
      * define a new object with passed parameters
     */
@@ -172,7 +172,7 @@ void newparticle(struct particle *p, double weight, double x, double y, double v
 
 }
 
-void ForceCompt(double *f, struct particle p1, struct particle p2) {
+__global__ void ForceCompt(double *f, struct particle p1, struct particle p2) {
     /*
      * Compute force acting on p1 by p1-p2 interactions
      *
@@ -419,13 +419,13 @@ void InitGrid(char *InputFile) {
 
     // Grid allocations
     iv = GenFieldGrid.EX * GenFieldGrid.EY;
-    GenFieldGrid.Values = malloc(iv * sizeof(1));
+    GenFieldGrid.Values = (int *)malloc(iv * sizeof(1));
     if (GenFieldGrid.Values == NULL) {
         fprintf(stderr, "Error allocating GenFieldGrid.Values \n");
         exit(-1);
     }
     iv = ParticleGrid.EX * ParticleGrid.EY;
-    ParticleGrid.Values = malloc(iv * sizeof(1));
+    ParticleGrid.Values = (int *)malloc(iv * sizeof(1));
     if (ParticleGrid.Values == NULL) {
         fprintf(stderr, "Error allocating ParticleGrid.Values \n");
         exit(-1);
@@ -517,8 +517,8 @@ __global__ void ParticleGeneration(struct i2dGrid grid, struct i2dGrid pgrid, st
 
     Xdots = grid.EX;
     Ydots = grid.EY;
-    vmax = MaxIntVal(Xdots * Ydots, grid.Values);
-    vmin = MinIntVal(Xdots * Ydots, grid.Values);
+    /*vmax = MaxIntVal(Xdots * Ydots, grid.Values);
+    vmin = MinIntVal(Xdots * Ydots, grid.Values);*/
 
     // Just count number of particles to be generated
     vmin = (double) (1 * vmax + 29 * vmin) / 30.0;
@@ -554,13 +554,14 @@ __global__ void ParticleGeneration(struct i2dGrid grid, struct i2dGrid pgrid, st
     }
 
     //if idx == 0 && idy == 0, to execute the print only once
-    if ((blockIdx.x * blockDim.x + threadIdx.x == 0) && (blockIdx.y * blockDim.y + threadIdx.y == 0)) print_Population(*pp);
+    if ((blockIdx.x * blockDim.x + threadIdx.x == 0) && (blockIdx.y * blockDim.y + threadIdx.y == 0)) print_Population<<<1, 1>>>(*pp);
 }
 
 __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
 
     struct particle p1, p2;
     int i, j;
+    double *f;
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stridex = gridDim.x * blockDim.x;
@@ -570,11 +571,11 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
     for (i = idx; i < pp->np; i+=stridex) {
         forces[index2D(0, i, 2)] = 0.0;
         forces[index2D(1, i, 2)] = 0.0;
-        newparticle(&p1, pp->weight[i], pp->x[i], pp->y[i], pp->vx[i], pp->vy[i]);
+        newparticle<<<1,1>>>(&p1, pp->weight[i], pp->x[i], pp->y[i], pp->vx[i], pp->vy[i]);
         for (j = idy; j < pp->np; j+=stridey) {
             if (j != i) {
-                newparticle(&p2, pp->weight[j], pp->x[j], pp->y[j], pp->vx[j], pp->vy[j]);
-                ForceCompt(f, p1, p2);
+                newparticle<<<1,1>>>(&p2, pp->weight[j], pp->x[j], pp->y[j], pp->vx[j], pp->vy[j]);
+                ForceCompt<<<1,1,>>>(f, p1, p2);
                 forces[index2D(0, i, 2)] = forces[index2D(0, i, 2)] + f[0];
                 forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
             }
@@ -599,7 +600,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         ParticleScreen(pgrid, *pp, t);
         // DumpPopulation call frequency may be changed
         if (t % 4 == 0) DumpPopulation(*pp, t);
-        ParticleStats(*pp, t); //TODO: only one at a time, lock resource
+        ParticleStats(*pp, t);
         SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp, forces);
 
         cudaDeviceSynchronize();
@@ -742,7 +743,8 @@ int rowlen(char *riga) {
 }
 
 int readrow(char *rg, int nc, FILE *daleg) {
-    int rowlen(), lrg;
+    //int rowlen(), lrg;
+    int lrg;
 
     if (fgets(rg, nc, daleg) == NULL) return (-1);
     lrg = rowlen(rg);
@@ -796,8 +798,9 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
     /*  Maximum value */
     fprintf(ouni, "255\n");
     /*  Values from 0 to 255 */
+    /*
     rmin = MinIntVal(s1 * s2, idata);
-    rmax = MaxIntVal(s1 * s2, idata);
+    rmax = MaxIntVal(s1 * s2, idata);*/ //TODO: MinIntVal and MaxIntVal should be made device functions
     if ((*vmin == *vmax) && (*vmin == 0)) {
         *vmin = rmin;
         *vmax = rmax;
@@ -845,7 +848,8 @@ int main(int argc, char *argv[]){
     printf("GeneratingField...\n");
 
     // GenFieldGrid
-    dim3 threads_per_block (16, 16, 1); // TODO: set dimensions of x and y dimensions, set N
+    int N = GenFieldGrid.EX * GenFieldGrid.EY;
+    dim3 threads_per_block (16, 16, 1); // TODO: set dimensions of x and y dimensions
     dim3 number_of_blocks ((N / threads_per_block.x) + 1, (N / threads_per_block.y) + 1, 1);
 
     GeneratingField <<<number_of_blocks, threads_per_block>>> (&GenFieldGrid, MaxIters);
