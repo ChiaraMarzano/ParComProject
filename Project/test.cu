@@ -858,15 +858,34 @@ int main(int argc, char *argv[]){
     cudaMemcpy(&GenFieldGrid, GenFieldGrid_dev, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
     cudaMemcpy(&MaxIters, MaxIters_dev, sizeof(int), cudaMemcpyHostToDevice);
     cudaMalloc(&TimeBit_dev, sizeof(double));
+
+    int deviceId;
+    int num_SMs;
+    int maxGridSize;
+    int maxThreadsPerBlock;
+    int maxThreadsDim;
+
+    //CUDA attributes used to solve "invalid configuration" error
+
+    cudaGetDevice(&deviceId);
+    cudaDeviceGetAttribute(&num_SMs, cudaDevAttrMultiProcessorCount, deviceId);
+    cudaDeviceGetAttribute(&maxGridSize, cudaDevAttrMaxGridDimX, deviceId);
+    cudaDeviceGetAttribute(&maxThreadsPerBlock, cudaDevAttrMaxThreadsPerBlock, deviceId);
+    cudaDeviceGetAttribute(&maxThreadsDim, cudaDevAttrMaxBlockDimX, deviceId);
     printf("GeneratingField...\n");
 
     // GenFieldGrid
-    int N = GenFieldGrid.EX * GenFieldGrid.EY;
-    dim3 threads_per_block (16, 16, 1); // TODO: set dimensions of x and y dimensions
-    dim3 number_of_blocks ((N / threads_per_block.x) + 1, (N / threads_per_block.y) + 1, 1);
+  
+    dim3 threads_per_block (32, 32, 1); // 32 * 32 = 1024, maximum number of threads per block
+    dim3 number_of_blocks (2 * num_SMs, 2 * num_SMs, 1); // (2 * 80) < 65535, maximum number of blocks per grid dimension
 
+    cudaError_t error;
+    printf ("Printing configuration:\n threads per block: %d x %d \n blocks per grid %d x %d \n", threads_per_block.x, threads_per_block.y, number_of_blocks.x, number_of_blocks.y);
+    printf("Printing limits: \n max grid size: %d \n max threads per block: %d \n max block dim: %d\n", maxGridSize, maxThreadsPerBlock, maxThreadsDim);
     GeneratingField <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, MaxIters_dev);
 
+    error = cudaGetLastError();
+    if (error != cudaSuccess) printf("Error: %s\n", cudaGetErrorString(error));
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
    
     cudaMemcpy(GenFieldGrid_dev, &GenFieldGrid, sizeof(struct i2dGrid), cudaMemcpyDeviceToHost);
