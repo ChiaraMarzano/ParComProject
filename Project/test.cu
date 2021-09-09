@@ -131,6 +131,7 @@ double TimeBit;   // Evolution time steps
 double * TimeBit_dev;
 
 i2dGrid * GenFieldGrid_dev;
+i2dGrid * ParticleGrid_dev;
 //  functions  prototypes
 int rowlen(char *riga);
 
@@ -476,7 +477,6 @@ __global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int *valu
         for (ix = idx; ix < Xdots; ix+=stridex) {
          
 		ca = Xinc * ix + Ir;
-            cb = Yinc * iy + Ii;
             rad = sqrt(ca * ca * ((double) 1.0 + (cb / ca) * (cb / ca)));
             zan = 0.0;
             zbn = 0.0;
@@ -503,14 +503,15 @@ void CountPopulation (struct Population *pp){
     /*
     int v;
 
-    for (iy = 0; iy < Ydots; iy++) {
-        for (ix = 0; ix < Xdots; ix++) {
+    for (int iy = 0; iy < Ydots; iy++) {
+        for (int ix = 0; ix < Xdots; ix++) {
             v = grid.Values[index2D(ix, iy, Xdots)];
             if (v <= vmax && v >= vmin) np++;
         }
     }
 
     pp->np = np;*/
+	pp->np = 10; //TODO: testing parameter, will remove
 }
 
 __global__ void ParticleGeneration(struct i2dGrid grid, struct i2dGrid pgrid, struct Population *pp) {
@@ -581,6 +582,9 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
             if (j != i) {
                 newparticle(&p2, pp->weight[j], pp->x[j], pp->y[j], pp->vx[j], pp->vy[j]);
                 ForceCompt(f, p1, p2);
+                forces[index2D(0, i, 2)] = forces[index2D(0, i, 2)] + f[0];
+                forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
+                forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
                 forces[index2D(0, i, 2)] = forces[index2D(0, i, 2)] + f[0];
                 forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
             }
@@ -843,6 +847,7 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
 } // end IntVal2ppm
 
 
+
 int main(int argc, char *argv[]){
 #include <time.h>
     time_t t0, t1;
@@ -894,17 +899,43 @@ int main(int argc, char *argv[]){
     
     // Particle population initialization
 
-    /*CountPopulation (&Particles);
+    CountPopulation (&Particles);
 
-    size_t size = Particles.np * sizeof((double) 1.0);
-    cudaMallocManaged((Particles.weight), size);
-    cudaMallocManaged((Particles.x), size);
-    cudaMallocManaged((Particles.y), size);
-    cudaMallocManaged((Particles.vx), size);
-    cudaMallocManaged((Particles.vy), size);
+    // Allocating ParticleGrid on device
+    cudaMalloc(&ParticleGrid_dev, sizeof(struct i2dGrid));
+    error = cudaGetLastError();
+    printf("Error: %s\n", cudaGetErrorString(error));
+    
+    cudaMemcpy(ParticleGrid_dev, &ParticleGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
+    error = cudaGetLastError();
+    printf("Error: %s\n", cudaGetErrorString(error));
+    
+    // Allocating Particles on device
+    int size = Particles.np * sizeof((double)1.0);
+    cudaMalloc(&Particles.weight, size);
+    error = cudaGetLastError();
+    printf("Error: %s\n", cudaGetErrorString(error));
+    
+    cudaMalloc(&Particles.x, size);
+    error = cudaGetLastError();
+    printf("Error: %s\n", cudaGetErrorString(error));
+    
+    cudaMalloc(&Particles.y, size);
+    error = cudaGetLastError();
+    printf("Error: %s\n", cudaGetErrorString(error));
+    
+
+    cudaMalloc(&Particles.vx, size);
+    error = cudaGetLastError();
+    printf("Error: %s\n", cudaGetErrorString(error));
+    
+
+    cudaMalloc(&Particles.vy, size);
+    error = cudaGetLastError();
+    printf("Error: %s\n", cudaGetErrorString(error));  
 
     printf("ParticleGeneration...\n");
-
+/*
     dim3 threads_per_block (16, 16, 1); // TODO: set dimensions of x and y dimensions
     dim3 number_of_blocks ((N / threads_per_block.x) + 1, (N / threads_per_block.y) + 1, 1);
 
