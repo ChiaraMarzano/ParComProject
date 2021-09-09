@@ -493,9 +493,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int *valu
             if (izmx < iz) izmx = iz;
             if (iz >= MaxIt) iz = 0;
 	  values[index2D(ix, iy, Xdots)] = iz;
-	  printf("In cycle y: %d, x: %d, X and Y: %d %d, gridval: %d \n", iy, ix, Ydots, Xdots, iz);
 	}
-    *iterations = 9;
     }
     return;
 }
@@ -868,8 +866,9 @@ int main(int argc, char *argv[]){
     //copying memory from host to device
     cudaMemcpy(GenFieldGrid_dev, &GenFieldGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
     cudaMemcpy(MaxIters_dev, &MaxIters, sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(values_dev, &(GenFieldGrid.Values), N * sizeof(int), cudaMemcpyHostToDevice);
+    //cudaMemcpy(values_dev, GenFieldGrid.Values, N * sizeof(int), cudaMemcpyHostToDevice); //may not be required considering that the memory is not initialized but only allocated
 
+ 
     //get number of multiprocessors to use in allocation of grids to further improve the performance
     int deviceId;
     int num_SMs;
@@ -890,18 +889,9 @@ int main(int argc, char *argv[]){
 
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
    
-    cudaMemcpy(&(GenFieldGrid.Values), values_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(GenFieldGrid.Values, values_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(TimeBit_dev, &TimeBit, sizeof(double), cudaMemcpyHostToDevice); 
     
-    for (int i = 0; i < GenFieldGrid.EY; i++){
-    	for (int j = 0; j < GenFieldGrid.EX; j++){
-		printf("values(%d, %d) \n", i, j);
-		//printf("%d\n", GenFieldGrid.Values[j + ( i * GenFieldGrid.EX)]);
-		fflush(stdout);
-	}
-    }
-
-    cudaMemcpy(&MaxIters, MaxIters_dev, sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemcpy(&TimeBit, TimeBit_dev, sizeof(double), cudaMemcpyHostToDevice);
     // Particle population initialization
 
     /*CountPopulation (&Particles);
@@ -935,8 +925,12 @@ int main(int argc, char *argv[]){
 
     SystemEvolution (&ParticleGrid, &Particles, MaxSteps, &g_forces, TimeBit_dev);
 
-    cudaDeviceSynchronize();*/ // Wait for the GPU as all the steps in main need to be sequential
-    fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
+    cudaDeviceSynchronize();
+    free(g_forces); */
+    // Wait for the GPU as all the steps in main need to be sequential
+    
+    
+    time(&t1);
     fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
     fprintf(stdout, "Computations ended in %lf seconds\n", difftime(t1, t0));
 
