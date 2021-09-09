@@ -152,7 +152,7 @@ double MinDoubleVal(int s, double *a);
 
 __host__ __device__ void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy);
 
-__global__ void GeneratingField(struct i2dGrid *grid, int * iterations);
+__global__ void GeneratingField(struct i2dGrid *grid, int * iterations, int * values);
 
 void CountPopulation (struct Population *pp);
 
@@ -440,7 +440,7 @@ void InitGrid(char *InputFile) {
     return;
 }
 
-__global__ void GeneratingField(struct i2dGrid *grid, int *iterations) {
+__global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int *values) {
     /*
    !  Compute "generating" points
    !  Output:
@@ -471,10 +471,11 @@ __global__ void GeneratingField(struct i2dGrid *grid, int *iterations) {
     int stridex = gridDim.x * blockDim.x;
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
     int stridey = gridDim.y * blockDim.y;
-
+  
     for (iy = idy; iy < Ydots; iy+=stridey) {
         for (ix = idx; ix < Xdots; ix+=stridex) {
-            ca = Xinc * ix + Ir;
+         
+		ca = Xinc * ix + Ir;
             cb = Yinc * iy + Ii;
             rad = sqrt(ca * ca * ((double) 1.0 + (cb / ca) * (cb / ca)));
             zan = 0.0;
@@ -491,11 +492,11 @@ __global__ void GeneratingField(struct i2dGrid *grid, int *iterations) {
             if (izmn > iz) izmn = iz;
             if (izmx < iz) izmx = iz;
             if (iz >= MaxIt) iz = 0;
-            grid->Values[index2D(ix, iy, Xdots)] = iz;
-        }
-    
-    }
+	  values[index2D(ix, iy, Xdots)] = iz;
+	  printf("In cycle y: %d, x: %d, X and Y: %d %d, gridval: %d \n", iy, ix, Ydots, Xdots, iz);
+	}
     *iterations = 9;
+    }
     return;
 }
 
@@ -853,44 +854,53 @@ int main(int argc, char *argv[]){
 
     InitGrid("Particles.inp");
 
-    cudaMalloc(&GenFieldGrid_dev, sizeof(struct i2dGrid));
+    int * values_dev;
+    cudaError_t error;
+    cudaMalloc(&GenFieldGrid_dev, sizeof(struct i2dGrid)); 
+    
+    int N = GenFieldGrid.EX * GenFieldGrid.EY; 
+    
+    //allocation of device variables to be used in kernels
+    cudaMalloc(&values_dev, N * sizeof(int));
     cudaMalloc(&MaxIters_dev, sizeof(int));
-    cudaMemcpy(&GenFieldGrid, GenFieldGrid_dev, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
-    cudaMemcpy(&MaxIters, MaxIters_dev, sizeof(int), cudaMemcpyHostToDevice);
     cudaMalloc(&TimeBit_dev, sizeof(double));
+   
+    //copying memory from host to device
+    cudaMemcpy(GenFieldGrid_dev, &GenFieldGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
+    cudaMemcpy(MaxIters_dev, &MaxIters, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(values_dev, &(GenFieldGrid.Values), N * sizeof(int), cudaMemcpyHostToDevice);
 
+    //get number of multiprocessors to use in allocation of grids to further improve the performance
     int deviceId;
     int num_SMs;
-    int maxGridSize;
-    int maxThreadsPerBlock;
-    int maxThreadsDim;
-
-    //CUDA attributes used to solve "invalid configuration" error
 
     cudaGetDevice(&deviceId);
     cudaDeviceGetAttribute(&num_SMs, cudaDevAttrMultiProcessorCount, deviceId);
-    cudaDeviceGetAttribute(&maxGridSize, cudaDevAttrMaxGridDimX, deviceId);
-    cudaDeviceGetAttribute(&maxThreadsPerBlock, cudaDevAttrMaxThreadsPerBlock, deviceId);
-    cudaDeviceGetAttribute(&maxThreadsDim, cudaDevAttrMaxBlockDimX, deviceId);
     printf("GeneratingField...\n");
 
     // GenFieldGrid
-  
-    dim3 threads_per_block (32, 32, 1); // 32 * 32 = 1024, maximum number of threads per block
-    dim3 number_of_blocks (2 * num_SMs, 2 * num_SMs, 1); // (2 * 80) < 65535, maximum number of blocks per grid dimension
+    
+    dim3 threads_per_block (2, 2, 1); // 32 * 32 = 1024, maximum number of threads per block
+    //dim3 threads_per_block (32, 32, 1); // 32 * 32 = 1024, maximum number of threads per block
+ 
+    dim3 number_of_blocks (2, 2, 1); // (2 * 80) < 65535, maximum number of blocks per grid dimension
+    //dim3 number_of_blocks (2 * num_SMs, 2 * num_SMs, 1); // (2 * 80) < 65535, maximum number of blocks per grid dimension
+    
+    GeneratingField <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, MaxIters_dev, values_dev);
 
-    cudaError_t error;
-    printf ("Printing configuration:\n threads per block: %d x %d \n blocks per grid %d x %d \n", threads_per_block.x, threads_per_block.y, number_of_blocks.x, number_of_blocks.y);
-    printf("Printing limits: \n max grid size: %d \n max threads per block: %d \n max block dim: %d\n", maxGridSize, maxThreadsPerBlock, maxThreadsDim);
-    GeneratingField <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, MaxIters_dev);
-
-    error = cudaGetLastError();
-    if (error != cudaSuccess) printf("Error: %s\n", cudaGetErrorString(error));
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
    
-    cudaMemcpy(GenFieldGrid_dev, &GenFieldGrid, sizeof(struct i2dGrid), cudaMemcpyDeviceToHost);
-    cudaMemcpy(MaxIters_dev, &MaxIters, sizeof(int), cudaMemcpyDeviceToHost);
-    printf("Iterations are now %d \n", MaxIters);
+    cudaMemcpy(&(GenFieldGrid.Values), values_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
+    
+    for (int i = 0; i < GenFieldGrid.EY; i++){
+    	for (int j = 0; j < GenFieldGrid.EX; j++){
+		printf("values(%d, %d) \n", i, j);
+		//printf("%d\n", GenFieldGrid.Values[j + ( i * GenFieldGrid.EX)]);
+		fflush(stdout);
+	}
+    }
+
+    cudaMemcpy(&MaxIters, MaxIters_dev, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(&TimeBit, TimeBit_dev, sizeof(double), cudaMemcpyHostToDevice);
     // Particle population initialization
 
@@ -925,10 +935,8 @@ int main(int argc, char *argv[]){
 
     SystemEvolution (&ParticleGrid, &Particles, MaxSteps, &g_forces, TimeBit_dev);
 
-    cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
-    free(g_forces);
-*/
-    time(&t1);
+    cudaDeviceSynchronize();*/ // Wait for the GPU as all the steps in main need to be sequential
+    fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
     fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
     fprintf(stdout, "Computations ended in %lf seconds\n", difftime(t1, t0));
 
