@@ -58,6 +58,7 @@ void print_particle(struct particle p) {
 
 struct Population {
     int np;
+    int * pop_count;
     double *weight, *x, *y, *vx, *vy; // particles have a position and few other properties
 } Particles;
 
@@ -157,7 +158,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int * iterations, int * va
 
 void CountPopulation (struct Population *pp);
 
-__global__ void ParticleGeneration(struct i2dGrid grid, struct i2dGrid pgrid, struct Population *pp);
+__global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values);
 
 void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double *forces, double * timebit_dev);
 
@@ -441,7 +442,7 @@ void InitGrid(char *InputFile) {
     return;
 }
 
-__global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int *values) {
+__global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int * values) {
     /*
    !  Compute "generating" points
    !  Output:
@@ -514,23 +515,26 @@ void CountPopulation (struct Population *pp){
 	pp->np = 10; //TODO: testing parameter, will remove
 }
 
-__global__ void ParticleGeneration(struct i2dGrid grid, struct i2dGrid pgrid, struct Population *pp) {
+__global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values) {
     // A system of particles is generated according to the value distribution of grid.Values
+	
+    
     int vmax, vmin, v;
     int Xdots, Ydots;
     int ix, iy, np, n;
     double p;
 
-    Xdots = grid.EX;
-    Ydots = grid.EY;
-    /*vmax = MaxIntVal(Xdots * Ydots, grid.Values);
-    vmin = MinIntVal(Xdots * Ydots, grid.Values);*/
+    Xdots = grid->EX;
+    Ydots = grid->EY;
+    //vmax = MaxIntVal(Xdots * Ydots, grid.Values);
+    //vmin = MinIntVal(Xdots * Ydots, grid.Values);
 
+    //TODO: testing
+    vmax = 1;
+    vmin = 1;
     // Just count number of particles to be generated
     vmin = (double) (1 * vmax + 29 * vmin) / 30.0;
-    np = pp->np;
-
-    // Population initialization
+    np = pp->np; 
     n = 0;
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -540,21 +544,21 @@ __global__ void ParticleGeneration(struct i2dGrid grid, struct i2dGrid pgrid, st
 
     for (iy = idy; iy < Ydots; iy+=stridey) {
         for (ix = idx; ix < Xdots; ix+=stridex) {
-            v = grid.Values[index2D(ix, iy, Xdots)];
-            if (v <= vmax && v >= vmin) {
+	    v = values[index2D(ix, iy, Xdots)];
+	    if (v <= vmax && v >= vmin) {
                 pp->weight[n] = v * 10.0;
 
-                p = (pgrid.Xe - pgrid.Xs) * ix / (grid.EX * 2.0);
-                pp->x[n] = pgrid.Xs + ((pgrid.Xe - pgrid.Xs) / 4.0) + p;
+                p = (pgrid->Xe - pgrid->Xs) * ix / (Xdots * 2.0);
+                pp->x[n] = pgrid->Xs + ((pgrid->Xe - pgrid->Xs) / 4.0) + p;
 
-                p = (pgrid.Ye - pgrid.Ys) * iy / (grid.EY * 2.0);
-                pp->y[n] = pgrid.Ys + ((pgrid.Ye - pgrid.Ys) / 4.0) + p;
+                p = (pgrid->Ye - pgrid->Ys) * iy / (Ydots * 2.0);
+                pp->y[n] = pgrid->Ys + ((pgrid->Ye - pgrid->Ys) / 4.0) + p;
 
                 pp->vx[n] = pp->vy[n] = 0.0; // at start particles are still
 
                 n++;
                 if (n >= np) break;
-            }
+           }
         }
         if (n >= np) break;
     }
@@ -864,6 +868,7 @@ int main(int argc, char *argv[]){
     int N = GenFieldGrid.EX * GenFieldGrid.EY; 
     
     //allocation of device variables to be used in kernels
+   
     cudaMalloc(&values_dev, N * sizeof(int));
     cudaMalloc(&MaxIters_dev, sizeof(int));
     cudaMalloc(&TimeBit_dev, sizeof(double));
@@ -893,56 +898,57 @@ int main(int argc, char *argv[]){
     GeneratingField <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, MaxIters_dev, values_dev);
 
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
-   
-    cudaMemcpy(GenFieldGrid.Values, values_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    error = cudaGetLastError();
+    printf("Error: %s\n", cudaGetErrorString(error));
+    //cudaMemcpy(GenFieldGrid.Values, values_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(TimeBit_dev, &TimeBit, sizeof(double), cudaMemcpyHostToDevice); 
     
     // Particle population initialization
 
-    CountPopulation (&Particles);
+    Population * Particles_dev;
+    cudaMalloc(&Particles_dev, sizeof(struct Population));
+
+    CountPopulation(&Particles);
+
+    cudaMemcpy(&(Particles_dev->np), &(Particles.np), sizeof(int), cudaMemcpyHostToDevice);
 
     // Allocating ParticleGrid on device
     cudaMalloc(&ParticleGrid_dev, sizeof(struct i2dGrid));
-    error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));
-    
     cudaMemcpy(ParticleGrid_dev, &ParticleGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
-    error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));
-    
+       
     // Allocating Particles on device
-    int size = Particles.np * sizeof((double)1.0);
-    cudaMalloc(&Particles.weight, size);
-    error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));
-    
-    cudaMalloc(&Particles.x, size);
-    error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));
-    
-    cudaMalloc(&Particles.y, size);
-    error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));
-    
 
-    cudaMalloc(&Particles.vx, size);
-    error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));
+    double * temp;
+    int population_count = Particles.np;
+    cudaMalloc(&temp, population_count * sizeof(double));
+    cudaMemcpy(&(Particles_dev->weight), &temp, sizeof(double *), cudaMemcpyHostToDevice);
+ 
+    temp = NULL;
+    cudaMalloc(&temp, population_count * sizeof(double));
+    cudaMemcpy(&(Particles_dev->x), &temp, sizeof(double *), cudaMemcpyHostToDevice);
     
-
-    cudaMalloc(&Particles.vy, size);
-    error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));  
-
+    temp = NULL;
+    cudaMalloc(&temp, population_count * sizeof(double));
+    cudaMemcpy(&(Particles_dev->y), &temp, sizeof(double *), cudaMemcpyHostToDevice);
+    
+    temp = NULL;
+    cudaMalloc(&temp, population_count * sizeof(double));
+    cudaMemcpy(&(Particles_dev->vx), &temp, sizeof(double *), cudaMemcpyHostToDevice);
+    
+    temp = NULL;
+    cudaMalloc(&temp, population_count * sizeof(double));
+    cudaMemcpy(&(Particles_dev->vy), &temp, sizeof(double *), cudaMemcpyHostToDevice);
+ 
     printf("ParticleGeneration...\n");
-/*
-    dim3 threads_per_block (16, 16, 1); // TODO: set dimensions of x and y dimensions
-    dim3 number_of_blocks ((N / threads_per_block.x) + 1, (N / threads_per_block.y) + 1, 1);
-
-    ParticleGeneration <<<number_of_blocks, threads_per_block>>> (GenFieldGrid, ParticleGrid, &Particles);
-
+      
+    ParticleGeneration <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, ParticleGrid_dev, Particles_dev, values_dev);
+    
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
-
+    
+    error = cudaGetLastError();
+    printf("Error: %s\n", cudaGetErrorString(error));
+    /*
     // Compute evolution of the particle population
 
     printf("SystemEvolution...\n");
