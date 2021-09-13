@@ -36,6 +36,8 @@
 #include <string.h>
 #include <math.h>
 
+#define MAX_THREADS 2048 // max threads per SM on Volta V100 architecture
+
 struct i2dGrid {
     int EX, EY; // extensions in X and Y directions
     double Xs, Xe, Ys, Ye; // initial and final value for X and Y directions
@@ -142,15 +144,11 @@ void InitGrid(char *InputFile);
 
 void ParticleScreen(struct i2dGrid *pgrid, struct Population p, int s);
 
+__global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max);
+
+__global__ void MinMaxDoubleVal(int total_size, double *values, double *min, double *max);
+
 void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name);
-
-double MaxIntVal(int s, int *a);
-
-double MinIntVal(int s, int *a);
-
-double MaxDoubleVal(int s, double *a);
-
-double MinDoubleVal(int s, double *a);
 
 __host__ __device__ void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy);
 
@@ -160,7 +158,7 @@ void CountPopulation (struct Population *pp);
 
 __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values);
 
-void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double *forces, double * timebit_dev);
+void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double * timebit_dev);
 
 __host__ __device__ void ForceCompt(double *f, struct particle p1, struct particle p2);
 
@@ -500,6 +498,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int * val
 }
 
 //OPT: test parallelized like min-max vs sequential
+//TODO: If function becomes kernel, change signature and add: int * vmin_dev, int * vmax_dev, int * values_dev
 void CountPopulation (struct Population *pp){
     /*
     int v;
@@ -526,12 +525,10 @@ __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid
 
     Xdots = grid->EX;
     Ydots = grid->EY;
-    //vmax = MaxIntVal(Xdots * Ydots, grid.Values);
-    //vmin = MinIntVal(Xdots * Ydots, grid.Values);
 
     //TODO: testing
-    vmax = 1;
-    vmin = 1;
+    vmax = 10000;
+    vmin = -10000;
     // Just count number of particles to be generated
     vmin = (double) (1 * vmax + 29 * vmin) / 30.0;
     np = pp->np; 
@@ -596,12 +593,19 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
     }
 }
 
-void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double *forces, double * timebit_dev) {
+void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double * timebit_dev) {
     double vmin, vmax;
     double f[2];
     int t;
 
+
+
     int N = (pgrid->EX) * (pgrid-> EY);
+    double *g_forces;
+    //cudaMalloc(&g_forces, 2 * population_count * sizeof(double));
+    //error = cudaGetLastError();
+    //printf("Error: %s\n", cudaGetErrorString(error));
+    
     dim3 threads_per_block (16, 16, 1); // TODO: set dimensions of x and y dimensions
     dim3 number_of_blocks ((N / threads_per_block.x) + 1, (N / threads_per_block.y) + 1, 1);
 
@@ -615,11 +619,11 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         // DumpPopulation call frequency may be changed
         if (t % 4 == 0) DumpPopulation(*pp, t);
         ParticleStats(*pp, t);
-        SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp, forces);
+        //SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp, forces);
 
         cudaDeviceSynchronize();
 
-        ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp, forces, timebit_dev);
+        //ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp, forces, timebit_dev);
     }
 }   // end SystemEvolution
 
@@ -656,8 +660,8 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population pp, int step) {
 
     InitializeEmptyGridInt<<<number_of_blocks, threads_per_block>>>(pgrid);
 
-    rmin = MinDoubleVal(pp.np, pp.weight);
-    rmax = MaxDoubleVal(pp.np, pp.weight);
+    rmin = 1;//MinDoubleVal(pp.np, pp.weight);
+    rmax = 1;//MaxDoubleVal(pp.np, pp.weight);
     wint = rmax - rmin;
     Dx = pgrid->Xe - pgrid->Xs;
     Dy = pgrid->Ye - pgrid->Ys;
@@ -682,58 +686,123 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population pp, int step) {
     IntVal2ppm(pgrid->EX, pgrid->EY, pgrid->Values, &vmin, &vmax, name);
 } // end ParticleScreen
 
-double MinIntVal(int s, int *a) {
-    int v;
-    int e;
+__global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max)
+{
+  if (threadIdx.x >= blockDim.x) {
+    return;
+  }
 
-    v = a[0];
+  // Declare shared memory arrays for local optima
+  __shared__ int local_mins[MAX_THREADS];
+  __shared__ int local_maxs[MAX_THREADS];
 
-    for (e = 0; e < s; e++) {
-        if (v > a[e]) v = a[e];
+  // Initialize size of data chunk for this thread, while adjusting for case of
+  // non-exact division
+  int local_size = total_size / blockDim.x;
+  int remainder = total_size % blockDim.x;
+  if (remainder != 0 && threadIdx.x < remainder)
+    local_size++;
+
+  // Initialize start and end data indexes for this thread, while adjusting for
+  // case of non-exact division
+  int first_val_idx = threadIdx.x * local_size;
+  if (threadIdx.x >= remainder)
+    first_val_idx += remainder;
+  int last_val_idx = first_val_idx + local_size;
+
+  // Initialize current local optima
+  int min_loc_curr = values[first_val_idx];
+  int max_loc_curr = values[first_val_idx];
+
+  // Compute each of the blockDim.x local optima
+  int i;
+  for (i = first_val_idx+1; i < last_val_idx; i++) {
+    if (min_loc_curr > values[i])
+      min_loc_curr = values[i];
+    else if (max_loc_curr < values[i])
+      max_loc_curr = values[i];
+  }
+  local_mins[threadIdx.x] = min_loc_curr;
+  local_maxs[threadIdx.x] = max_loc_curr;
+
+  // Wait for local optima arrays to be filled
+  __syncthreads();
+
+  // Find global optima among local ones, but only in thread 0
+  if (threadIdx.x == 0) {
+    int min_glob_curr = local_mins[0];
+    int max_glob_curr = local_maxs[0];
+    for (i = 1; i < blockDim.x; i++) {
+      if (min_glob_curr > local_mins[i])
+        min_glob_curr = local_mins[i];
+      else if (max_glob_curr < local_maxs[i])
+        max_glob_curr = local_maxs[i];
     }
+    *min = min_glob_curr;
+    *max = max_glob_curr;
+  }
 
-    return (v);
+  return;
 }
 
-double MaxIntVal(int s, int *a) {
-    int v;
-    int e;
+__global__ void MinMaxDoubleVal(int total_size, double *values, double *min, double *max)
+{
+  if (threadIdx.x >= blockDim.x) {
+    return;
+  }
+  
+  printf("Here\n\n\n");
+  // Declare shared memory arrays for local optima
+  __shared__ double local_mins[MAX_THREADS];
+  __shared__ double local_maxs[MAX_THREADS];
 
-    v = a[0];
+  // Initialize size of data chunk for this thread, while adjusting for case of
+  // non-exact division
+  int local_size = total_size / blockDim.x;
+  int remainder = total_size % blockDim.x;
+  if (remainder != 0 && threadIdx.x < remainder)
+    local_size++;
 
-    for (e = 0; e < s; e++) {
-        if (v < a[e]) v = a[e];
+  // Initialize start and end data indexes for this thread, while adjusting for
+  // case of non-exact division
+  int first_val_idx = threadIdx.x * local_size;
+  if (threadIdx.x >= remainder)
+    first_val_idx += remainder;
+  int last_val_idx = first_val_idx + local_size;
 
+  // Initialize current local optima
+  double min_loc_curr = values[first_val_idx];
+  double max_loc_curr = values[first_val_idx];
+
+  // Compute each of the blockDim.x local optima
+  int i;
+  for (i = first_val_idx+1; i < last_val_idx; i++) {
+    if (min_loc_curr > values[i])
+      min_loc_curr = values[i];
+    else if (max_loc_curr < values[i])
+      max_loc_curr = values[i];
+  }
+  local_mins[threadIdx.x] = min_loc_curr;
+  local_maxs[threadIdx.x] = max_loc_curr;
+
+  // Wait for local optima arrays to be filled
+  __syncthreads();
+
+  // Find global optima among local ones, but only in thread 0
+  if (threadIdx.x == 0) {
+    double min_glob_curr = local_mins[0];
+    double max_glob_curr = local_maxs[0];
+    for (i = 1; i < blockDim.x; i++) {
+      if (min_glob_curr > local_mins[i])
+        min_glob_curr = local_mins[i];
+      else if (max_glob_curr < local_maxs[i])
+        max_glob_curr = local_maxs[i];
     }
+    *min = min_glob_curr;
+    *max = max_glob_curr;
+  }
 
-    return (v);
-}
-
-double MinDoubleVal(int s, double *a) {
-    double v;
-    int e;
-
-    v = a[0];
-
-    for (e = 0; e < s; e++) {
-        if (v > a[e]) v = a[e];
-    }
-
-    return (v);
-}
-
-double MaxDoubleVal(int s, double *a) {
-    double v;
-    int e;
-
-    v = a[0];
-
-    for (e = 0; e < s; e++) {
-        if (v < a[e]) v = a[e];
-
-    }
-
-    return (v);
+  return;
 }
 
 int rowlen(char *riga) {
@@ -899,8 +968,6 @@ int main(int argc, char *argv[]){
 
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
 
-    error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));
     //cudaMemcpy(GenFieldGrid.Values, values_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(TimeBit_dev, &TimeBit, sizeof(double), cudaMemcpyHostToDevice); 
     
@@ -908,6 +975,28 @@ int main(int argc, char *argv[]){
 
     Population * Particles_dev;
     cudaMalloc(&Particles_dev, sizeof(struct Population));
+
+  // MIN-MAX
+  // Initialize containers and device copies
+  int vmin, vmax;
+  int *vmin_dev, *vmax_dev;
+  cudaMalloc(&vmin_dev, sizeof(int));
+  cudaMalloc(&vmax_dev, sizeof(int));
+  
+  // Run kernel with optimal number of threads
+  int n_threads = sqrt(N);  // minimum for x + N/x
+  if (n_threads > MAX_THREADS)
+    n_threads = MAX_THREADS;
+  
+  MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev); //Shared memory only works in the same bloc //Shared memory only works in the same block
+  
+  error = cudaGetLastError();
+  printf("Error: %s", cudaGetErrorString(error));
+  cudaDeviceSynchronize();
+  
+  // Free memory
+  cudaFree(vmin_dev);
+  cudaFree(vmax_dev);
 
     CountPopulation(&Particles);
 
@@ -946,26 +1035,49 @@ int main(int argc, char *argv[]){
     
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
     
-    error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));
-    /*
     // Compute evolution of the particle population
 
     printf("SystemEvolution...\n");
 
-    double *g_forces;
-    cudaMallocManaged (g_forces, 2 * Particles.np * sizeof((double) 1.0));
-    if (g_forces == NULL) {
-        fprintf(stderr, "Error mem alloc of forces!\n");
-        exit(1);
-    }
+  // MIN-MAX
+  // Initialize containers and device copies
+  double rmin, rmax;
+  double *rmin_dev, *rmax_dev;
+  cudaMalloc(&rmin_dev, sizeof(double));
+  
+  cudaMalloc(&rmax_dev, sizeof(double));
+  
+  // Run kernel with optimal number of threads
+  n_threads = sqrt(Particles.np);  // minimum for x + N/x
+  if (n_threads > MAX_THREADS)
+	  n_threads = MAX_THREADS;
+  
+ /* Testing how weights are allocated
+  cudaMemcpy(&Particles.weight, Particles_dev->weight, Particles.np * sizeof(double), cudaMemcpyDeviceToHost);
+  error = cudaGetLastError();
+  printf("Error: %s\n", cudaGetErrorString(error));
+  fflush(stdout);
 
-    SystemEvolution (&ParticleGrid, &Particles, MaxSteps, &g_forces, TimeBit_dev);
+  for (int c = 0; c < Particles.np; c++){
+  	printf("Weight of %d is %f\n", c, Particles.weight[c]);
+	fflush(stdout);
+  }
 
-    cudaDeviceSynchronize();
-    free(g_forces); */
-    // Wait for the GPU as all the steps in main need to be sequential
-    
+  printf("Out of the loop\n");
+  fflush(stdout);
+
+  MinMaxDoubleVal<<<1, n_threads>>>(Particles_dev->np, Particles_dev->weight, rmin_dev, rmax_dev); //Shared memory only works in the same bloc //Shared memory only works in the same block
+  
+  error = cudaGetLastError();
+  printf("Error: %s", cudaGetErrorString(error));
+  cudaDeviceSynchronize();
+  */
+  // Free memory
+  cudaFree(rmin_dev);
+  cudaFree(rmax_dev);
+  
+  //SystemEvolution (&ParticleGrid, &Particles, MaxSteps, TimeBit_dev);
+  //cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
     
     time(&t1);
     fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
