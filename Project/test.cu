@@ -672,13 +672,16 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 	cudaMalloc(&temp_double, N * sizeof(double));
 	cudaMemcpy(temp_double, pp->vy, N * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(&(pp_dev->vy), &temp_double, sizeof(double *), cudaMemcpyHostToDevice);
-	
+        temp_double = NULL;
+
 	SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp_dev, g_forces);
 
         cudaDeviceSynchronize();
         
 	ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces, timebit);
 	cudaDeviceSynchronize();
+
+	cudaFree(pp_dev);
     }
 }   // end SystemEvolution
 
@@ -1187,7 +1190,16 @@ int main(int argc, char *argv[]){
   
   SystemEvolution (&ParticleGrid, &Particles, MaxSteps, TimeBit);
     
-    time(&t1);
+  cudaFree(GenFieldGrid_dev);
+  cudaFree(MaxIters_dev);
+  cudaFree(TimeBit_dev);
+  cudaFree(weight_dev);
+  cudaFree(values_dev);
+  cudaFree(Particles_dev);
+  cudaFree(ParticleGrid_dev);
+
+  fflush(stdout);
+  time(&t1);
     fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
     fprintf(stdout, "Computations ended in %lf seconds\n", difftime(t1, t0));
 
