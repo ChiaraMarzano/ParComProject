@@ -1173,7 +1173,10 @@ int main(int argc, char *argv[]){
   n_threads = sqrt(Particles.np);  // minimum for x + N/x
   if (n_threads > MAX_THREADS)
 	  n_threads = MAX_THREADS;
-// MinMaxDoubleVal<<<1, n_threads>>>(Particles.np, Particles_dev->weight, rmin_dev, rmax_dev); //Shared memory only works in the same block
+  double * weight_dev;
+  cudaMalloc(&weight_dev, Particles.np * sizeof(double));
+  cudaMemcpy(weight_dev, &(Particles.weight), Particles.np * sizeof(double), cudaMemcpyHostToDevice);
+  MinMaxDoubleVal<<<1, n_threads>>>(Particles.np, weight_dev, rmin_dev, rmax_dev); //Shared memory only works in the same block
 
   error = cudaGetLastError();
   printf("Error: %s", cudaGetErrorString(error));
