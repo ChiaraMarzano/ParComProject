@@ -36,7 +36,7 @@
 #include <string.h>
 #include <math.h>
 
-#define MAX_THREADS 2048 // max threads per SM on Volta V100 architecture
+#define MAX_THREADS 1024
 
 struct i2dGrid {
     int EX, EY; // extensions in X and Y directions
@@ -156,11 +156,11 @@ __global__ void GeneratingField(struct i2dGrid *grid, int * iterations, int * va
 
 void CountPopulation (struct Population *pp);
 
-__global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values);
+__global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values, int vmin, int vmax);
 
-void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double * timebit_dev);
+void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double timebit);
 
-__global__ void ForceCompt(double *f, struct particle * p1, struct particle * p2);
+__global__ void ForceCompt(double *f, struct particle p1, struct particle p2);
 
 __global__ void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy) {
     /*
@@ -174,43 +174,43 @@ __global__ void newparticle(struct particle *p, double weight, double x, double 
 
 }
 
-__global__ void ForceCompt(double *f, struct particle * p1, struct particle * p2) {
+__global__ void ForceCompt(double * f, struct particle p1, struct particle p2) {
     /*
      * Compute force acting on p1 by p1-p2 interactions
      *
     */
-    double force, d, d2, dx, dy;
+	double force, d2, dx, dy;
     static double k = 0.001, tiny = (double) 1.0 / (double) 1000000.0;
 
-    dx = p2->x - p1->x;
-    dy = p2->y - p1->y;
+    dx = p2.x - p1.x;
+    dy = p2.y - p1.y;
     d2 = dx * dx + dy * dy;  // what if particles get in touch? Simply avoid the case
     if (d2 < tiny) d2 = tiny;
-    force = (k * p1->weight * p2->weight) / d2;
+    force = (k * p1.weight * p2.weight) / d2;
     f[0] = force * dx / sqrt(d2);
+    
     f[1] = force * dy / sqrt(d2);
+
+    printf("In ForceCompt, f[0] %f\n\n\n\n", f[0]);
+    printf("In ForceCompt, f[1] %f\n\n\n\n", f[1]);
 }
 
 //OPT: for cycle can be parallelized (independent iterations)
-__global__ void ComptPopulation(struct Population *p, double *forces, double * timebit_dev) {
+__global__ void ComptPopulation(struct Population *p, double *forces, double timebit) {
     /*
      * compute effects of forces on particles in a interval time
      *
     */
-    int i;
-    double x0, x1, y0, y1;
+   int i; 
+   for (i = 0; i < p->np; i++) {
+        
+	    p->x[i] = p->x[i] + (p->vx[i] * timebit) +
+                  (0.5 * forces[index2D(0, i, 2)] * timebit * timebit / p->weight[i]);
+        p->vx[i] = p->vx[i] + forces[index2D(0, i, 2)] * timebit / p->weight[i];
 
-    for (i = 0; i < p->np; i++) {
-        x0 = p->x[i];
-        y0 = p->y[i];
-
-        p->x[i] = p->x[i] + (p->vx[i] * (*timebit_dev)) +
-                  (0.5 * forces[index2D(0, i, 2)] * (*timebit_dev) * (*timebit_dev) / p->weight[i]);
-        p->vx[i] = p->vx[i] + forces[index2D(0, i, 2)] *(*timebit_dev) / p->weight[i];
-
-        p->y[i] = p->y[i] + (p->vy[i] * (*timebit_dev)) +
-                  (0.5 * forces[index2D(1, i, 2)] * (*timebit_dev) * (*timebit_dev) / p->weight[i]);
-        p->vy[i] = p->vy[i] + forces[index2D(1, i, 2)] * (*timebit_dev) / p->weight[i];
+        p->y[i] = p->y[i] + (p->vy[i] * timebit) +
+                  (0.5 * forces[index2D(1, i, 2)] * timebit * timebit / p->weight[i]);
+        p->vy[i] = p->vy[i] + forces[index2D(1, i, 2)] * timebit / p->weight[i];
 
     }
 }
@@ -514,11 +514,11 @@ void CountPopulation (struct Population *pp){
 	pp->np = 10; //TODO: testing parameter, will remove
 }
 
-__global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values) {
+__global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values, int vmin, int vmax) {
     // A system of particles is generated according to the value distribution of grid.Values
 	
-    
-    int vmax, vmin, v;
+   printf("min: %d max: %d\n", vmin, vmax); 
+    int v;
     int Xdots, Ydots;
     int ix, iy, np, n;
     double p;
@@ -526,9 +526,6 @@ __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid
     Xdots = grid->EX;
     Ydots = grid->EY;
 
-    //TODO: testing
-    vmax = 10000;
-    vmin = -10000;
     // Just count number of particles to be generated
     vmin = (double) (1 * vmax + 29 * vmin) / 30.0;
     np = pp->np; 
@@ -568,12 +565,11 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
 
     struct particle p1, p2;
     int i, j;
-    double *f;
-    struct particle * p1_p;
-    struct particle * p2_p;
+    double f[2];
+    //variables to compute force between p1 and p2
+    double force, d2, dx, dy;
+    static double k = 0.001, tiny = (double) 1.0 / (double) 1000000.0;
 
-    cudaMalloc(&p1_p, sizeof(struct particle));
-    cudaMalloc(&p2_p, sizeof(struct particle));
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stridex = gridDim.x * blockDim.x;
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
@@ -582,22 +578,41 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
     for (i = idx; i < pp->np; i+=stridex) {
         forces[index2D(0, i, 2)] = 0.0;
         forces[index2D(1, i, 2)] = 0.0;
-        newparticle<<<1,1>>>(p1_p, pp->weight[i], pp->x[i], pp->y[i], pp->vx[i], pp->vy[i]);
+
+	p1.weight = pp->weight[i];
+	p1.x = pp->x[i];
+	p1.y = pp->y[i];
+	p1.vx = pp->vx[i];
+	p1.vy = pp->vy[i];
+	
 	for (j = idy; j < pp->np; j+=stridey) {
             if (j != i) {
-                newparticle<<<1,1>>>(p2_p, pp->weight[j], pp->x[j], pp->y[j], pp->vx[j], pp->vy[j]);
-		ForceCompt<<<1,1>>>(f, p1_p, p2_p);
-       		forces[index2D(0, i, 2)] = forces[index2D(0, i, 2)] + f[0];
+		p2.weight = pp->weight[j];
+		p2.x = pp->x[j];
+		p2.y = pp->y[j];
+		p2.vx = pp->vx[j];
+		p2.vy = pp->vy[j];
+		
+		//force computation between p1 and p2
+		dx = p2.x - p1.x;
+		dy = p2.y - p1.y;
+		d2 = dx * dx + dy * dy;  // what if particles get in touch? Simply avoid the case
+		if (d2 < tiny) d2 = tiny;
+		force = (k * p1.weight * p2.weight) / d2;
+		f[0] = force * dx / sqrt(d2);
+		f[1] = force * dy / sqrt(d2);
+
+		forces[index2D(0, i, 2)] = forces[index2D(0, i, 2)] + f[0];
                 forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
                 forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
                 forces[index2D(0, i, 2)] = forces[index2D(0, i, 2)] + f[0];
                 forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
-            }
+	    }
         }
     }
 }
 
-void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double * timebit_dev) {
+void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double timebit) {
     double vmin, vmax;
     double f[2];
     int t;
@@ -629,14 +644,10 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         ParticleStats(*pp, t);
         
 	Population * pp_dev;
-	int * temp_int;
 	double * temp_double;
         cudaMalloc(&pp_dev, sizeof(struct Population));
-        cudaError_t error = cudaGetLastError();
 	
-	cudaMalloc(&temp_int, sizeof(int));
-	cudaMemcpy(temp_int, &pp->np, sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(&(pp_dev->np), &temp_int, sizeof(int *), cudaMemcpyHostToDevice);
+        cudaMemcpy(&(pp_dev->np), &(pp->np), sizeof(int), cudaMemcpyHostToDevice);	
 
 	cudaMalloc(&temp_double, N * sizeof(double));
 	cudaMemcpy(temp_double, pp->weight, N * sizeof(double), cudaMemcpyHostToDevice);
@@ -662,20 +673,12 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 	cudaMemcpy(temp_double, pp->vy, N * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(&(pp_dev->vy), &temp_double, sizeof(double *), cudaMemcpyHostToDevice);
 	
-	//move pp to device memory
 	SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp_dev, g_forces);
 
         cudaDeviceSynchronize();
-
-        error = cudaGetLastError();
-        printf("Error instant evolution: %s\n", cudaGetErrorString(error));	
         
-	ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces, timebit_dev);
-    
-        cudaDeviceSynchronize();
-
-        error = cudaGetLastError();
-        printf("Error compt population: %s\n", cudaGetErrorString(error));	
+	ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces, timebit);
+	cudaDeviceSynchronize();
     }
 }   // end SystemEvolution
 
@@ -822,7 +825,7 @@ __global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max)
 __global__ void MinMaxDoubleVal(int total_size, double *values, double *min, double *max)
 {
   if (threadIdx.x >= blockDim.x) {
-    return;
+	  return;
   }
   
   printf("Here\n\n\n");
@@ -1019,9 +1022,7 @@ int main(int argc, char *argv[]){
     //copying memory from host to device
     cudaMemcpy(GenFieldGrid_dev, &GenFieldGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
     cudaMemcpy(MaxIters_dev, &MaxIters, sizeof(int), cudaMemcpyHostToDevice);
-    //cudaMemcpy(values_dev, GenFieldGrid.Values, N * sizeof(int), cudaMemcpyHostToDevice); //may not be required considering that the memory is not initialized but only allocated
 
- 
     //get number of multiprocessors to use in allocation of grids to further improve the performance
     int deviceId;
     int num_SMs;
@@ -1062,16 +1063,14 @@ int main(int argc, char *argv[]){
   if (n_threads > MAX_THREADS)
     n_threads = MAX_THREADS;
   
-  MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev); //Shared memory only works in the same bloc //Shared memory only works in the same block
+  MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev); //Shared memory only works in the same block
   
   error = cudaGetLastError();
-  printf("Error: %s", cudaGetErrorString(error));
+  printf("Error: %s\n", cudaGetErrorString(error));
   cudaDeviceSynchronize();
   
-  // Free memory
-  cudaFree(vmin_dev);
-  cudaFree(vmax_dev);
-
+    cudaMemcpy(&vmin, vmin_dev, sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&vmax, vmax_dev, sizeof(int), cudaMemcpyDeviceToHost);
     CountPopulation(&Particles);
 
     cudaMemcpy(&(Particles_dev->np), &(Particles.np), sizeof(int), cudaMemcpyHostToDevice);
@@ -1113,13 +1112,17 @@ int main(int argc, char *argv[]){
     
     printf("ParticleGeneration...\n");
       
-    ParticleGeneration <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, ParticleGrid_dev, Particles_dev, values_dev);
+    ParticleGeneration <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, ParticleGrid_dev, Particles_dev, values_dev, vmin, vmax);
     
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
    error = cudaGetLastError();
    printf("Error: %s\n", cudaGetErrorString(error));
 
-    // Compute evolution of the particle population
+  // Free memory
+  cudaFree(vmin_dev);
+  cudaFree(vmax_dev);
+    
+  // Compute evolution of the particle population
 
     printf("SystemEvolution...\n");
 
@@ -1162,16 +1165,16 @@ int main(int argc, char *argv[]){
   // Initialize containers and device copies
   double rmin, rmax;
   double *rmin_dev, *rmax_dev;
-  cudaMalloc(&rmin_dev, sizeof(double));
   
+  cudaMalloc(&rmin_dev, sizeof(double));
   cudaMalloc(&rmax_dev, sizeof(double));
   
   // Run kernel with optimal number of threads
   n_threads = sqrt(Particles.np);  // minimum for x + N/x
   if (n_threads > MAX_THREADS)
 	  n_threads = MAX_THREADS;
- //MinMaxDoubleVal<<<1, n_threads>>>(Particles_dev->np, Particles_dev->weight, rmin_dev, rmax_dev); //Shared memory only works in the same bloc //Shared memory only works in the same block
-  
+// MinMaxDoubleVal<<<1, n_threads>>>(Particles.np, Particles_dev->weight, rmin_dev, rmax_dev); //Shared memory only works in the same block
+
   error = cudaGetLastError();
   printf("Error: %s", cudaGetErrorString(error));
   cudaDeviceSynchronize();
@@ -1179,7 +1182,7 @@ int main(int argc, char *argv[]){
   cudaFree(rmin_dev);
   cudaFree(rmax_dev);
   
-  SystemEvolution (&ParticleGrid, &Particles, MaxSteps, &TimeBit);
+  SystemEvolution (&ParticleGrid, &Particles, MaxSteps, TimeBit);
     
     time(&t1);
     fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
