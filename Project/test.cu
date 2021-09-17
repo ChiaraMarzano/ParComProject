@@ -88,7 +88,6 @@ void DumpPopulation(struct Population p, int t) {
     fclose(dump);
 }
 
-//OPT: for cycle could be parallelized (min/max stats)
 void ParticleStats(struct Population p, int t) {
     /*
      * write a file with statistics on population
@@ -190,12 +189,9 @@ __global__ void ForceCompt(double * f, struct particle p1, struct particle p2) {
     f[0] = force * dx / sqrt(d2);
     
     f[1] = force * dy / sqrt(d2);
-
-    printf("In ForceCompt, f[0] %f\n\n\n\n", f[0]);
-    printf("In ForceCompt, f[1] %f\n\n\n\n", f[1]);
 }
 
-//OPT: for cycle can be parallelized (independent iterations)
+//TODO? OPT: for cycle can be parallelized (independent iterations)
 __global__ void ComptPopulation(struct Population *p, double *forces, double timebit) {
     /*
      * compute effects of forces on particles in a interval time
@@ -494,8 +490,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int * val
     return;
 }
 
-//OPT: test parallelized like min-max vs sequential
-//TODO: If function becomes kernel, change signature and add: int * vmin_dev, int * vmax_dev, int * values_dev
+//TODO: write function and change signatures
 void CountPopulation (struct Population *pp){
     /*
     int v;
@@ -508,13 +503,11 @@ void CountPopulation (struct Population *pp){
     }
 
     pp->np = np;*/
-	pp->np = 10; //TODO: testing parameter, will remove
+	pp->np = 10;
 }
 
 __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values, int vmin, int vmax) {
     // A system of particles is generated according to the value distribution of grid.Values
-	
-   printf("min: %d max: %d\n", vmin, vmax); 
     int v;
     int Xdots, Ydots;
     int ix, iy, np, n;
@@ -615,9 +608,8 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
     int N = (pgrid->EX) * (pgrid-> EY);
     double *g_forces;
     cudaMalloc(&g_forces, 2 * pp->np * sizeof(double));
-    cudaError_t error = cudaGetLastError();
-    printf("Error: %s\n", cudaGetErrorString(error));
     
+    // TODO ?
     dim3 threads_per_block (2, 2, 1); // 32 * 32 = 1024, maximum number of threads per block
     //dim3 threads_per_block (32, 32, 1); // 32 * 32 = 1024, maximum number of threads per block
  
@@ -727,21 +719,18 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population pp, int step) {
     InitializeEmptyGridInt<<<number_of_blocks, threads_per_block>>>(pgrid_dev);
     cudaDeviceSynchronize();
 
-    cudaError_t error = cudaGetLastError();
-
     temp = NULL;  
     cudaMalloc(&temp, N * sizeof(int));
     cudaMemcpy(&temp, &(pgrid_dev->Values), sizeof(int *), cudaMemcpyDeviceToHost);
     cudaMemcpy(pgrid->Values, temp, N * sizeof(int), cudaMemcpyDeviceToHost);
     cudaFree(temp);
     
-    rmin = 1;//MinDoubleVal(pp.np, pp.weight);
+    rmin = 1;//MinDoubleVal(pp.np, pp.weight);  // TODO ?
     rmax = 1;//MaxDoubleVal(pp.np, pp.weight);
     wint = rmax - rmin;
     Dx = pgrid->Xe - pgrid->Xs;
     Dy = pgrid->Ye - pgrid->Ys;
 
-    //TODO: check if parallelizable
     for (n = 0; n < pp.np; n++) {
         // keep a tiny border free anyway
         ix = Xdots * pp.x[n] / Dx;
@@ -760,6 +749,7 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population pp, int step) {
     if (step <= 0) { vmin = vmax = 0; }
     IntVal2ppm(pgrid->EX, pgrid->EY, pgrid->Values, &vmin, &vmax, name);
 } // end ParticleScreen
+
 
 __global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max)
 {
@@ -820,13 +810,13 @@ __global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max)
   return;
 }
 
+
 __global__ void MinMaxDoubleVal(int total_size, double *values, double *min, double *max)
 {
   if (threadIdx.x >= blockDim.x) {
 	  return;
   }
-  
-  printf("Here\n\n\n");
+
   // Declare shared memory arrays for local optima
   __shared__ double local_mins[MAX_THREADS];
   __shared__ double local_maxs[MAX_THREADS];
@@ -924,7 +914,8 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
     FILE *ouni, *ColMap;
     int vp, vs;
     int rmin, rmax, value;
-    char fname[80], jname[80], command[80];
+    char fname[80];
+    // char jname[80], command[80];
     /*
        Define color map: 256 colours
     */
@@ -986,10 +977,10 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
     }
     fclose(ouni);
     // the following instructions require ImageMagick tool: comment out if not available
-    strcpy(jname, name);
-    strcat(jname, ".jpg\0");
-    sprintf(command, "convert %s %s\0", fname, jname);
-    system(command);
+    // strcpy(jname, name);
+    // strcat(jname, ".jpg\0");
+    // sprintf(command, "convert %s %s\0", fname, jname);
+    // system(command);
 
     return;
 } // end IntVal2ppm
@@ -1006,7 +997,6 @@ int main(int argc, char *argv[]){
     InitGrid("Particles.inp");
 
     int * values_dev;
-    cudaError_t error;
     cudaMalloc(&GenFieldGrid_dev, sizeof(struct i2dGrid)); 
     
     int N = GenFieldGrid.EX * GenFieldGrid.EY; 
@@ -1030,7 +1020,8 @@ int main(int argc, char *argv[]){
     printf("GeneratingField...\n");
 
     // GenFieldGrid
-    
+
+    // TODO ?
     dim3 threads_per_block (2, 2, 1); // 32 * 32 = 1024, maximum number of threads per block
     //dim3 threads_per_block (32, 32, 1); // 32 * 32 = 1024, maximum number of threads per block
  
@@ -1061,10 +1052,7 @@ int main(int argc, char *argv[]){
   if (n_threads > MAX_THREADS)
     n_threads = MAX_THREADS;
   
-  MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev); //Shared memory only works in the same block
-  
-  error = cudaGetLastError();
-  printf("Error: %s\n", cudaGetErrorString(error));
+  MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev); // shared memory only works in the same block
   cudaDeviceSynchronize();
   
     cudaMemcpy(&vmin, vmin_dev, sizeof(int), cudaMemcpyDeviceToHost);
@@ -1113,8 +1101,6 @@ int main(int argc, char *argv[]){
     ParticleGeneration <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, ParticleGrid_dev, Particles_dev, values_dev, vmin, vmax);
     
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
-   error = cudaGetLastError();
-   printf("Error: %s\n", cudaGetErrorString(error));
 
   // Free memory
   cudaFree(vmin_dev);
@@ -1153,11 +1139,6 @@ int main(int argc, char *argv[]){
     cudaMemcpy(&temp, &(Particles_dev->vy), sizeof(double *), cudaMemcpyDeviceToHost);
     cudaMemcpy(Particles.vy, temp, population_count * sizeof(double), cudaMemcpyDeviceToHost);
     cudaFree(temp);
-    
-  for (int c = 0; c < Particles.np; c++){
-  	printf("Weight of %d is %f\n", c, Particles.weight[c]);
-	fflush(stdout);
-  }
 
   // MIN-MAX
   // Initialize containers and device copies
@@ -1173,10 +1154,8 @@ int main(int argc, char *argv[]){
   double * weight_dev;
   cudaMalloc(&weight_dev, Particles.np * sizeof(double));
   cudaMemcpy(weight_dev, &(Particles.weight), Particles.np * sizeof(double), cudaMemcpyHostToDevice);
-  MinMaxDoubleVal<<<1, n_threads>>>(Particles.np, weight_dev, rmin_dev, rmax_dev); //Shared memory only works in the same block
+  MinMaxDoubleVal<<<1, n_threads>>>(Particles.np, weight_dev, rmin_dev, rmax_dev); // shared memory only works in the same block
 
-  error = cudaGetLastError();
-  printf("Error: %s", cudaGetErrorString(error));
   cudaDeviceSynchronize();
   // Free memory
   cudaFree(rmin_dev);
