@@ -127,7 +127,6 @@ void ParticleStats(struct Population p, int t) {
 
 // Parameters
 int MaxIters, MaxSteps;
-int * MaxIters_dev;
 
 double TimeBit;   // Evolution time steps
 double * TimeBit_dev;
@@ -436,7 +435,7 @@ void InitGrid(char *InputFile) {
     return;
 }
 
-__global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int * values) {
+__global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
     /*
    !  Compute "generating" points
    !  Output:
@@ -449,7 +448,6 @@ __global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int * val
     double Xinc, Sr, Ir;
     int izmn, izmx;
     int Xdots, Ydots;
-    int MaxIt = * iterations;
 
     Xdots = grid->EX;
     Ydots = grid->EY;
@@ -1004,12 +1002,10 @@ int main(int argc, char *argv[]){
     //allocation of device variables to be used in kernels
    
     cudaMalloc(&values_dev, N * sizeof(int));
-    cudaMalloc(&MaxIters_dev, sizeof(int));
     cudaMalloc(&TimeBit_dev, sizeof(double));
    
     //copying memory from host to device
     cudaMemcpy(GenFieldGrid_dev, &GenFieldGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
-    cudaMemcpy(MaxIters_dev, &MaxIters, sizeof(int), cudaMemcpyHostToDevice);
 
     //get number of multiprocessors to use in allocation of grids to further improve the performance
     int deviceId;
@@ -1028,7 +1024,7 @@ int main(int argc, char *argv[]){
     dim3 number_of_blocks (2, 2, 1); // (2 * 80) < 65535, maximum number of blocks per grid dimension
     //dim3 number_of_blocks (2 * num_SMs, 2 * num_SMs, 1); // (2 * 80) < 65535, maximum number of blocks per grid dimension
     
-    GeneratingField <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, MaxIters_dev, values_dev);
+    GeneratingField <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, MaxIters, values_dev);
 
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
 
@@ -1164,7 +1160,6 @@ int main(int argc, char *argv[]){
   SystemEvolution (&ParticleGrid, &Particles, MaxSteps, TimeBit);
     
   cudaFree(GenFieldGrid_dev);
-  cudaFree(MaxIters_dev);
   cudaFree(TimeBit_dev);
   cudaFree(weight_dev);
   cudaFree(values_dev);
