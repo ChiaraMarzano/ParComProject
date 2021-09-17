@@ -242,7 +242,7 @@ __global__ void newparticle(struct particle *p, double weight, double x, double 
 
 __global__ void GeneratingField(struct i2dGrid *grid, int * iterations, int * values);
 
-void CountPopulation (struct Population *pp);
+__global__ void CountPopulation(int total_size, int *values, int *count, int vmin, int vmax);
 
 __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values, int vmin, int vmax);
 
@@ -584,21 +584,50 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
 }
 
 
-//TODO: write function and change signatures
-void CountPopulation (struct Population *pp){
-    /*
-    int v;
+__global__ void CountPopulation(int total_size, int *values, int *count, int vmin, int vmax)
+{
+  if (threadIdx.x >= blockDim.x) {
+    return;
+  }
 
-    for (int iy = 0; iy < Ydots; iy++) {
-        for (int ix = 0; ix < Xdots; ix++) {
-            v = grid.Values[index2D(ix, iy, Xdots)];
-            if (v <= vmax && v >= vmin) np++;
-        }
+  // Declare shared memory arrays for local counts
+  __shared__ int local_counts[SHARED_MEM_MAX_THREADS];
+
+  // Initialize size of data chunk for this thread, while adjusting for case of
+  // non-exact division
+  int local_size = total_size / blockDim.x;
+  int remainder = total_size % blockDim.x;
+  if (remainder != 0 && threadIdx.x < remainder)
+    local_size++;
+
+  // Initialize start and end data indexes for this thread, while adjusting for
+  // case of non-exact division
+  int first_val_idx = threadIdx.x * local_size;
+  if (threadIdx.x >= remainder)
+    first_val_idx += remainder;
+  int last_val_idx = first_val_idx + local_size;
+
+  // Compute each of the blockDim.x local counts
+  int i;
+  for (i = first_val_idx; i < last_val_idx; i++) {
+    if (vmin <= values[i] && values[i] <= vmax)
+      local_counts[threadIdx.x]++;
+  }
+
+  // Wait for local optima arrays to be filled
+  __syncthreads();
+
+  // Compute global count, but only in thread 0
+  if (threadIdx.x == 0) {
+    *count = local_counts[0];
+    for (i = 1; i < blockDim.x; i++) {
+        *count += local_counts[i];
     }
+  }
 
-    pp->np = np;*/
-	pp->np = 10;
+  return;
 }
+
 
 __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values, int vmin, int vmax) {
     // A system of particles is generated according to the value distribution of grid.Values
@@ -1152,12 +1181,18 @@ int main(int argc, char *argv[]){
   if (n_threads > SHARED_MEM_MAX_THREADS)
     n_threads = SHARED_MEM_MAX_THREADS;
   
-  MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev); // shared memory only works in the same block
+  MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev);  // shared memory only works in the same block
   cudaDeviceSynchronize();
   
     cudaMemcpy(&vmin, vmin_dev, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(&vmax, vmax_dev, sizeof(int), cudaMemcpyDeviceToHost);
-    CountPopulation(&Particles);
+
+    // Allocating ParticleGrid on device
+    cudaMalloc(&ParticleGrid_dev, sizeof(struct i2dGrid));
+    cudaMemcpy(ParticleGrid_dev, &ParticleGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
+
+    CountPopulation<<<1, n_threads>>>(N, GenFieldGrid_dev->Values, GenFieldGrid_dev->np, vmin, vmax);  // shared memory only works in the same block
+    cudaDeviceSynchronize();
 
     cudaMemcpy(&(Particles_dev->np), &(Particles.np), sizeof(int), cudaMemcpyHostToDevice);
 
@@ -1166,7 +1201,6 @@ int main(int argc, char *argv[]){
     cudaMemcpy(ParticleGrid_dev, &ParticleGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
        
     // Allocating Particles on device
-
     double * temp;
     int population_count = Particles.np;
     cudaMalloc(&temp, population_count * sizeof(double));
@@ -1254,7 +1288,7 @@ int main(int argc, char *argv[]){
   double * weight_dev;
   cudaMalloc(&weight_dev, Particles.np * sizeof(double));
   cudaMemcpy(weight_dev, &(Particles.weight), Particles.np * sizeof(double), cudaMemcpyHostToDevice);
-  MinMaxDoubleVal<<<1, n_threads>>>(Particles.np, weight_dev, rmin_dev, rmax_dev); // shared memory only works in the same block
+  // TODO uncomment MinMaxDoubleVal<<<1, n_threads>>>(Particles.np, weight_dev, rmin_dev, rmax_dev); // shared memory only works in the same block
 
   cudaDeviceSynchronize();
   // Free memory
