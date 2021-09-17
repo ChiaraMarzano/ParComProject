@@ -190,8 +190,10 @@ void ParticleStats(struct Population p, int t) {
 
     FILE *stats;
     double w, xg, yg, wmin, wmax;
-    double *stats[5];
+    double *stats[5], *stats_dev[5];
     int i;
+
+    cudaMalloc(&stats_dev, 5*sizeof(double));
 
     if (t <= 0) stats = fopen("Population.sta", "w");
     else stats = fopen("Population.sta", "a"); // append new data
@@ -199,11 +201,14 @@ void ParticleStats(struct Population p, int t) {
         fprintf(stderr, "Error append/open file Population.sta\n");
         exit(1);
     }
-    // TODO stuff with cuda functions
+    // TODO: alloc Population in cuda or something
     int n_threads = sqrt(p.np);  // minimum for x + N/x
     if (n_threads > SHARED_MEM_MAX_THREADS)
         n_threads = SHARED_MEM_MAX_THREADS;
-    ParallelComputeStats<<<1, n_threads>>>(&p, *stats); // note: stats = [wmin, wmax, w, xg, yg]
+    ParallelComputeStats<<<1, n_threads>>>(&p, stats_dev);
+    cudaMemcpy(stats_dev, stats, 5*sizeof(double), cudaMemcpyDeviceToHost);
+    // note: stats = [wmin, wmax, w, xg, yg]
+
     fprintf(stats, "At iteration %d particles: %d; wmin, wmax = %lf, %lf;\n",
             t, p.np, stats[0], stats[1]);
     fprintf(stats, "   total weight = %lf; CM = (%10.4lf,%10.4lf)\n",
