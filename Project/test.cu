@@ -36,7 +36,7 @@
 #include <string.h>
 #include <math.h>
 
-#define MAX_THREADS 1024
+#define SHARED_MEM_MAX_THREADS 1024
 
 struct i2dGrid {
     int EX, EY; // extensions in X and Y directions
@@ -68,6 +68,7 @@ __host__ __device__ void print_Population(struct Population p) {
     printf("Population: np = %d\n", p.np);
 }
 
+
 void DumpPopulation(struct Population p, int t) {
     /*
      * save population values on file
@@ -87,6 +88,7 @@ void DumpPopulation(struct Population p, int t) {
     fwrite(p.y, sizeof((double) 1.0), p.np, dump);
     fclose(dump);
 }
+
 
 void ParticleStats(struct Population p, int t) {
     /*
@@ -122,6 +124,7 @@ void ParticleStats(struct Population p, int t) {
     fclose(stats);
 
 }
+
 
 #define index2D(i, j, LD1) i + ((j)*LD1)    // element position in 2-D arrays
 
@@ -160,6 +163,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 
 __global__ void ForceCompt(double *f, struct particle p1, struct particle p2);
 
+
 __global__ void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy) {
     /*
      * define a new object with passed parameters
@@ -171,6 +175,7 @@ __global__ void newparticle(struct particle *p, double weight, double x, double 
     p->vy = vy;
 
 }
+
 
 __global__ void ForceCompt(double * f, struct particle p1, struct particle p2) {
     /*
@@ -189,6 +194,7 @@ __global__ void ForceCompt(double * f, struct particle p1, struct particle p2) {
     
     f[1] = force * dy / sqrt(d2);
 }
+
 
 //TODO? OPT: for cycle can be parallelized (independent iterations)
 __global__ void ComptPopulation(struct Population *p, double *forces, double timebit) {
@@ -209,6 +215,7 @@ __global__ void ComptPopulation(struct Population *p, double *forces, double tim
 
     }
 }
+
 
 void InitGrid(char *InputFile) {
 
@@ -435,6 +442,7 @@ void InitGrid(char *InputFile) {
     return;
 }
 
+
 __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
     /*
    !  Compute "generating" points
@@ -487,6 +495,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
     }
     return;
 }
+
 
 //TODO: write function and change signatures
 void CountPopulation (struct Population *pp){
@@ -549,6 +558,7 @@ __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid
     if ((blockIdx.x * blockDim.x + threadIdx.x == 0) && (blockIdx.y * blockDim.y + threadIdx.y == 0)) print_Population(*pp);
 }
 
+
 __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
 
     struct particle p1, p2;
@@ -599,6 +609,7 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
         }
     }
 }
+
 
 void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double timebit) {
     int t;
@@ -670,6 +681,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
     }
 }   // end SystemEvolution
 
+
 __global__ void InitializeEmptyGridInt(struct i2dGrid *pgrid){
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -684,6 +696,8 @@ __global__ void InitializeEmptyGridInt(struct i2dGrid *pgrid){
     }
 }
 
+
+// TODO: we should pass pp by pointer for efficiency
 void ParticleScreen(struct i2dGrid *pgrid, struct Population pp, int step) {
     // Distribute a particle population in a grid for visualization purposes
 
@@ -756,8 +770,8 @@ __global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max)
   }
 
   // Declare shared memory arrays for local optima
-  __shared__ int local_mins[MAX_THREADS];
-  __shared__ int local_maxs[MAX_THREADS];
+  __shared__ int local_mins[SHARED_MEM_MAX_THREADS];
+  __shared__ int local_maxs[SHARED_MEM_MAX_THREADS];
 
   // Initialize size of data chunk for this thread, while adjusting for case of
   // non-exact division
@@ -816,8 +830,8 @@ __global__ void MinMaxDoubleVal(int total_size, double *values, double *min, dou
   }
 
   // Declare shared memory arrays for local optima
-  __shared__ double local_mins[MAX_THREADS];
-  __shared__ double local_maxs[MAX_THREADS];
+  __shared__ double local_mins[SHARED_MEM_MAX_THREADS];
+  __shared__ double local_maxs[SHARED_MEM_MAX_THREADS];
 
   // Initialize size of data chunk for this thread, while adjusting for case of
   // non-exact division
@@ -868,6 +882,7 @@ __global__ void MinMaxDoubleVal(int total_size, double *values, double *min, dou
   return;
 }
 
+
 int rowlen(char *riga) {
     int lungh;
     char c;
@@ -889,6 +904,7 @@ int rowlen(char *riga) {
     return (0);
 }
 
+
 int readrow(char *rg, int nc, FILE *daleg) {
     //int rowlen(), lrg;
     int lrg;
@@ -901,6 +917,7 @@ int readrow(char *rg, int nc, FILE *daleg) {
     }
     return (lrg);
 }
+
 
 void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
     /*
@@ -1045,8 +1062,8 @@ int main(int argc, char *argv[]){
   
   // Run kernel with optimal number of threads
   int n_threads = sqrt(N);  // minimum for x + N/x
-  if (n_threads > MAX_THREADS)
-    n_threads = MAX_THREADS;
+  if (n_threads > SHARED_MEM_MAX_THREADS)
+    n_threads = SHARED_MEM_MAX_THREADS;
   
   MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev); // shared memory only works in the same block
   cudaDeviceSynchronize();
@@ -1145,8 +1162,8 @@ int main(int argc, char *argv[]){
   
   // Run kernel with optimal number of threads
   n_threads = sqrt(Particles.np);  // minimum for x + N/x
-  if (n_threads > MAX_THREADS)
-	  n_threads = MAX_THREADS;
+  if (n_threads > SHARED_MEM_MAX_THREADS)
+	  n_threads = SHARED_MEM_MAX_THREADS;
   double * weight_dev;
   cudaMalloc(&weight_dev, Particles.np * sizeof(double));
   cudaMemcpy(weight_dev, &(Particles.weight), Particles.np * sizeof(double), cudaMemcpyHostToDevice);
