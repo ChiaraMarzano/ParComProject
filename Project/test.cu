@@ -90,6 +90,99 @@ void DumpPopulation(struct Population p, int t) {
 }
 
 
+__global__ void ParallelComputeStats(struct Population *pop, double *returns)
+{
+  if (threadIdx.x >= blockDim.x) {
+    return;
+  }
+
+  // Declare shared memory arrays
+  __shared__ double local_wmins[SHARED_MEM_MAX_THREADS];
+  __shared__ double local_wmaxs[SHARED_MEM_MAX_THREADS];
+  __shared__ double local_wsums[SHARED_MEM_MAX_THREADS];
+  __shared__ double local_xgs[SHARED_MEM_MAX_THREADS];
+  __shared__ double local_ygs[SHARED_MEM_MAX_THREADS];
+
+  // Initialize size of data chunk for this thread, while adjusting for case of
+  // non-exact division
+  int total_size = pop->np;
+  int local_size = total_size / blockDim.x;
+  int remainder = total_size % blockDim.x;
+  if (remainder != 0 && threadIdx.x < remainder)
+    local_size++;
+  // Initialize start and end data indexes for this thread, while adjusting for
+  // case of non-exact division
+  int first_val_idx = threadIdx.x * local_size;
+  if (threadIdx.x >= remainder)
+    first_val_idx += remainder;
+  int last_val_idx = first_val_idx + local_size;
+
+  // Initialize current local values
+  double local_wmin_curr = pop->weight[first_val_idx];
+  double local_wmax_curr = pop->weight[first_val_idx];
+  double local_wsum_curr = pop->weight[first_val_idx];
+  double local_xg_curr = pop->weight[first_val_idx] * pop->x[first_val_idx];
+  double local_yg_curr = pop->weight[first_val_idx] * pop->y[first_val_idx];
+  double w;
+  int i;
+
+  // Loop to compute local values
+  for (i = first_val_idx+1; i < last_val_idx; i++) {
+    w = pop->weight[i];
+    // Update sums
+    local_wsum_curr += w;
+    local_xg_curr += w * pop->x[i];
+    local_yg_curr += w * pop->y[i];
+    // Update optima
+    if (local_wmin_curr > w)
+      local_wmin_curr = w;
+    if (local_wmax_curr < w)
+      local_wmax_curr = w;
+  }
+  // Assign values to local arrays
+  local_wmins[threadIdx.x] = local_wmin_curr;
+  local_wmaxs[threadIdx.x] = local_wmax_curr;
+  local_wsums[threadIdx.x] = local_wsum_curr;
+  local_xgs[threadIdx.x] = local_xg_curr;
+  local_ygs[threadIdx.x] = local_yg_curr;
+
+  // Wait for local arrays to be filled
+  __syncthreads();
+
+  // Compute global values off of local ones, but only in thread 0
+  if (threadIdx.x != 0) {
+    return;
+  }
+  // Initialize current global values
+  double global_wmin_curr = local_wmins[0];
+  double global_wmax_curr = local_wmaxs[0];
+  double global_wsum_curr = local_wsums[0];
+  double global_xg_curr = local_xgs[0];
+  double global_yg_curr = local_ygs[0];
+  // Loop to compute global values
+  for (i = 1; i < blockDim.x; i++) {
+    // Update sums
+    global_wsum_curr += local_wsums[i];
+    global_xg_curr += local_xgs[i];
+    global_yg_curr += local_ygs[i];
+    // Update optima
+    if (global_wmin_curr > local_wmins[i])
+      global_wmin_curr = local_wmins[i];
+    if (global_wmax_curr < local_wmaxs[i])
+      global_wmax_curr = local_wmaxs[i];
+  }
+
+  // Assign values to return array
+  returns[0] = global_wmin_curr;
+  returns[1] = global_wmax_curr;
+  returns[2] = global_wsum_curr;
+  returns[3] = global_xg_curr / global_wsum_curr;
+  returns[4] = global_yg_curr / global_wsum_curr;
+  return;
+}
+
+
+// TODO we should pass p by pointer
 void ParticleStats(struct Population p, int t) {
     /*
      * write a file with statistics on population
@@ -97,6 +190,7 @@ void ParticleStats(struct Population p, int t) {
 
     FILE *stats;
     double w, xg, yg, wmin, wmax;
+    double *stats[5];
     int i;
 
     if (t <= 0) stats = fopen("Population.sta", "w");
@@ -105,22 +199,15 @@ void ParticleStats(struct Population p, int t) {
         fprintf(stderr, "Error append/open file Population.sta\n");
         exit(1);
     }
-    w = xg = yg = 0.0;
-    wmin = wmax = p.weight[0];
-    for (i = 0; i < p.np; i++) {
-        //TODO: metti tutto in unica funzione computestatsbis
-        if (wmin > p.weight[i]) wmin = p.weight[i];
-        if (wmax < p.weight[i]) wmax = p.weight[i];
-        w = w + p.weight[i];
-        xg = xg + (p.weight[i] * p.x[i]);
-        yg = yg + (p.weight[i] * p.y[i]);
-    }
-    xg = xg / w;
-    yg = yg / w;
+    // TODO stuff with cuda functions
+    int n_threads = sqrt(p.np);  // minimum for x + N/x
+    if (n_threads > SHARED_MEM_MAX_THREADS)
+        n_threads = SHARED_MEM_MAX_THREADS;
+    ParallelComputeStats<<<1, n_threads>>>(&p, *stats); // note: stats = [wmin, wmax, w, xg, yg]
     fprintf(stats, "At iteration %d particles: %d; wmin, wmax = %lf, %lf;\n",
-            t, p.np, wmin, wmax);
+            t, p.np, stats[0], stats[1]);
     fprintf(stats, "   total weight = %lf; CM = (%10.4lf,%10.4lf)\n",
-            w, xg, yg);
+            stats[2], stats[3], stats[4]);
     fclose(stats);
 
 }
