@@ -450,7 +450,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int * val
     int ix, iy, iz;
     double ca, cb, za, zb;
     double rad, zan, zbn;
-    double Xinc, Yinc, Sr, Si, Ir, Ii;
+    double Xinc, Sr, Ir;
     int izmn, izmx;
     int Xdots, Ydots;
     int MaxIt = * iterations;
@@ -458,11 +458,8 @@ __global__ void GeneratingField(struct i2dGrid *grid, int *iterations, int * val
     Xdots = grid->EX;
     Ydots = grid->EY;
     Sr = grid->Xe - grid->Xs;
-    Si = grid->Ye - grid->Ys;
     Ir = grid->Xs;
-    Ii = grid->Ys;
     Xinc = Sr / (double) Xdots;
-    Yinc = Si / (double) Ydots;
 
     izmn = 9999;
     izmx = -9;
@@ -613,8 +610,6 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
 }
 
 void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double timebit) {
-    double vmin, vmax;
-    double f[2];
     int t;
 
     int N = (pgrid->EX) * (pgrid-> EY);
@@ -703,7 +698,7 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population pp, int step) {
     // Distribute a particle population in a grid for visualization purposes
 
     int ix, iy, Xdots, Ydots;
-    int np, n, wp;
+    int n, wp;
     double rmin, rmax;
     int static vmin, vmax;
     double Dx, Dy, wint, wv;
@@ -1166,7 +1161,6 @@ int main(int argc, char *argv[]){
 
   // MIN-MAX
   // Initialize containers and device copies
-  double rmin, rmax;
   double *rmin_dev, *rmax_dev;
   
   cudaMalloc(&rmin_dev, sizeof(double));
@@ -1207,6 +1201,3 @@ int main(int argc, char *argv[]){
 
     return (0);
 }  // end FinalApplication
-
-
-
