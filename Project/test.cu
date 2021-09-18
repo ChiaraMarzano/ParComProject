@@ -92,93 +92,93 @@ void DumpPopulation(struct Population p, int t) {
 
 __global__ void ParallelComputeStats(struct Population *pop, double *returns)
 {
-  if (threadIdx.x >= blockDim.x) {
+    if (threadIdx.x >= blockDim.x) {
+        return;
+    }
+
+    // Declare shared memory arrays
+    __shared__ double local_wmins[SHARED_MEM_MAX_THREADS];
+    __shared__ double local_wmaxs[SHARED_MEM_MAX_THREADS];
+    __shared__ double local_wsums[SHARED_MEM_MAX_THREADS];
+    __shared__ double local_xgs[SHARED_MEM_MAX_THREADS];
+    __shared__ double local_ygs[SHARED_MEM_MAX_THREADS];
+
+    // Initialize size of data chunk for this thread, while adjusting for case
+    // of non-exact division
+    int total_size = pop->np;
+    int local_size = total_size / blockDim.x;
+    int remainder = total_size % blockDim.x;
+    if (remainder != 0 && threadIdx.x < remainder)
+        local_size++;
+    // Initialize start and end data indexes for this thread, while adjusting
+    // for case of non-exact division
+    int first_val_idx = threadIdx.x * local_size;
+    if (threadIdx.x >= remainder)
+        first_val_idx += remainder;
+    int last_val_idx = first_val_idx + local_size;
+
+    // Initialize current local values
+    double local_wmin_curr = pop->weight[first_val_idx];
+    double local_wmax_curr = pop->weight[first_val_idx];
+    double local_wsum_curr = pop->weight[first_val_idx];
+    double local_xg_curr = pop->weight[first_val_idx] * pop->x[first_val_idx];
+    double local_yg_curr = pop->weight[first_val_idx] * pop->y[first_val_idx];
+    double w;
+    int i;
+
+    // Loop to compute local values
+    for (i = first_val_idx+1; i < last_val_idx; i++) {
+        w = pop->weight[i];
+        // Update sums
+        local_wsum_curr += w;
+        local_xg_curr += w * pop->x[i];
+        local_yg_curr += w * pop->y[i];
+        // Update optima
+        if (local_wmin_curr > w)
+            local_wmin_curr = w;
+        if (local_wmax_curr < w)
+            local_wmax_curr = w;
+    }
+    // Assign values to local arrays
+    local_wmins[threadIdx.x] = local_wmin_curr;
+    local_wmaxs[threadIdx.x] = local_wmax_curr;
+    local_wsums[threadIdx.x] = local_wsum_curr;
+    local_xgs[threadIdx.x] = local_xg_curr;
+    local_ygs[threadIdx.x] = local_yg_curr;
+
+    // Wait for local arrays to be filled
+    __syncthreads();
+
+    // Compute global values off of local ones, but only in thread 0
+    if (threadIdx.x != 0) {
+        return;
+    }
+    // Initialize current global values
+    double global_wmin_curr = local_wmins[0];
+    double global_wmax_curr = local_wmaxs[0];
+    double global_wsum_curr = local_wsums[0];
+    double global_xg_curr = local_xgs[0];
+    double global_yg_curr = local_ygs[0];
+    // Loop to compute global values
+    for (i = 1; i < blockDim.x; i++) {
+        // Update sums
+        global_wsum_curr += local_wsums[i];
+        global_xg_curr += local_xgs[i];
+        global_yg_curr += local_ygs[i];
+        // Update optima
+        if (global_wmin_curr > local_wmins[i])
+            global_wmin_curr = local_wmins[i];
+        if (global_wmax_curr < local_wmaxs[i])
+            global_wmax_curr = local_wmaxs[i];
+    }
+
+    // Assign values to return array
+    returns[0] = global_wmin_curr;
+    returns[1] = global_wmax_curr;
+    returns[2] = global_wsum_curr;
+    returns[3] = global_xg_curr / global_wsum_curr;
+    returns[4] = global_yg_curr / global_wsum_curr;
     return;
-  }
-
-  // Declare shared memory arrays
-  __shared__ double local_wmins[SHARED_MEM_MAX_THREADS];
-  __shared__ double local_wmaxs[SHARED_MEM_MAX_THREADS];
-  __shared__ double local_wsums[SHARED_MEM_MAX_THREADS];
-  __shared__ double local_xgs[SHARED_MEM_MAX_THREADS];
-  __shared__ double local_ygs[SHARED_MEM_MAX_THREADS];
-
-  // Initialize size of data chunk for this thread, while adjusting for case of
-  // non-exact division
-  int total_size = pop->np;
-  int local_size = total_size / blockDim.x;
-  int remainder = total_size % blockDim.x;
-  if (remainder != 0 && threadIdx.x < remainder)
-    local_size++;
-  // Initialize start and end data indexes for this thread, while adjusting for
-  // case of non-exact division
-  int first_val_idx = threadIdx.x * local_size;
-  if (threadIdx.x >= remainder)
-    first_val_idx += remainder;
-  int last_val_idx = first_val_idx + local_size;
-
-  // Initialize current local values
-  double local_wmin_curr = pop->weight[first_val_idx];
-  double local_wmax_curr = pop->weight[first_val_idx];
-  double local_wsum_curr = pop->weight[first_val_idx];
-  double local_xg_curr = pop->weight[first_val_idx] * pop->x[first_val_idx];
-  double local_yg_curr = pop->weight[first_val_idx] * pop->y[first_val_idx];
-  double w;
-  int i;
-
-  // Loop to compute local values
-  for (i = first_val_idx+1; i < last_val_idx; i++) {
-    w = pop->weight[i];
-    // Update sums
-    local_wsum_curr += w;
-    local_xg_curr += w * pop->x[i];
-    local_yg_curr += w * pop->y[i];
-    // Update optima
-    if (local_wmin_curr > w)
-      local_wmin_curr = w;
-    if (local_wmax_curr < w)
-      local_wmax_curr = w;
-  }
-  // Assign values to local arrays
-  local_wmins[threadIdx.x] = local_wmin_curr;
-  local_wmaxs[threadIdx.x] = local_wmax_curr;
-  local_wsums[threadIdx.x] = local_wsum_curr;
-  local_xgs[threadIdx.x] = local_xg_curr;
-  local_ygs[threadIdx.x] = local_yg_curr;
-
-  // Wait for local arrays to be filled
-  __syncthreads();
-
-  // Compute global values off of local ones, but only in thread 0
-  if (threadIdx.x != 0) {
-    return;
-  }
-  // Initialize current global values
-  double global_wmin_curr = local_wmins[0];
-  double global_wmax_curr = local_wmaxs[0];
-  double global_wsum_curr = local_wsums[0];
-  double global_xg_curr = local_xgs[0];
-  double global_yg_curr = local_ygs[0];
-  // Loop to compute global values
-  for (i = 1; i < blockDim.x; i++) {
-    // Update sums
-    global_wsum_curr += local_wsums[i];
-    global_xg_curr += local_xgs[i];
-    global_yg_curr += local_ygs[i];
-    // Update optima
-    if (global_wmin_curr > local_wmins[i])
-      global_wmin_curr = local_wmins[i];
-    if (global_wmax_curr < local_wmaxs[i])
-      global_wmax_curr = local_wmaxs[i];
-  }
-
-  // Assign values to return array
-  returns[0] = global_wmin_curr;
-  returns[1] = global_wmax_curr;
-  returns[2] = global_wsum_curr;
-  returns[3] = global_xg_curr / global_wsum_curr;
-  returns[4] = global_yg_curr / global_wsum_curr;
-  return;
 }
 
 
@@ -320,19 +320,16 @@ __global__ void ComptPopulation(struct Population *p, double *forces, double tim
      * compute effects of forces on particles in a interval time
      *
     */
-   int i;  
+    int i;  
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stridex = gridDim.x * blockDim.x;
-   for (i = idx; i < p->np; i+=stridex) {
-        
+    for (i = idx; i < p->np; i+=stridex) {    
 	    p->x[i] = p->x[i] + (p->vx[i] * timebit) +
                   (0.5 * forces[index2D(0, i, 2)] * timebit * timebit / p->weight[i]);
         p->vx[i] = p->vx[i] + forces[index2D(0, i, 2)] * timebit / p->weight[i];
-
         p->y[i] = p->y[i] + (p->vy[i] * timebit) +
                   (0.5 * forces[index2D(1, i, 2)] * timebit * timebit / p->weight[i]);
         p->vy[i] = p->vy[i] + forces[index2D(1, i, 2)] * timebit / p->weight[i];
-
     }
 }
 
@@ -593,7 +590,6 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
   
     for (iy = idy; iy < Ydots; iy+=stridey) {
         for (ix = idx; ix < Xdots; ix+=stridex) {
-         
 		ca = Xinc * ix + Ir;
             rad = sqrt(ca * ca * ((double) 1.0 + (cb / ca) * (cb / ca)));
             zan = 0.0;
@@ -619,46 +615,46 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
 
 __global__ void CountPopulation(int total_size, int *values, int *count, int vmin, int vmax)
 {
-  if (threadIdx.x >= blockDim.x) {
-    return;
-  }
-
-  // Declare shared memory arrays for local counts
-  __shared__ int local_counts[SHARED_MEM_MAX_THREADS];
-
-  // Initialize size of data chunk for this thread, while adjusting for case of
-  // non-exact division
-  int local_size = total_size / blockDim.x;
-  int remainder = total_size % blockDim.x;
-  if (remainder != 0 && threadIdx.x < remainder)
-    local_size++;
-
-  // Initialize start and end data indexes for this thread, while adjusting for
-  // case of non-exact division
-  int first_val_idx = threadIdx.x * local_size;
-  if (threadIdx.x >= remainder)
-    first_val_idx += remainder;
-  int last_val_idx = first_val_idx + local_size;
-
-  // Compute each of the blockDim.x local counts
-  int i;
-  for (i = first_val_idx; i < last_val_idx; i++) {
-    if (vmin <= values[i] && values[i] <= vmax)
-      local_counts[threadIdx.x]++;
-  }
-
-  // Wait for local optima arrays to be filled
-  __syncthreads();
-
-  // Compute global count, but only in thread 0
-  if (threadIdx.x == 0) {
-    *count = local_counts[0];
-    for (i = 1; i < blockDim.x; i++) {
-        *count += local_counts[i];
+    if (threadIdx.x >= blockDim.x) {
+        return;
     }
-  }
 
-  return;
+    // Declare shared memory arrays for local counts
+    __shared__ int local_counts[SHARED_MEM_MAX_THREADS];
+
+    // Initialize size of data chunk for this thread, while adjusting for case of
+    // non-exact division
+    int local_size = total_size / blockDim.x;
+    int remainder = total_size % blockDim.x;
+    if (remainder != 0 && threadIdx.x < remainder)
+        local_size++;
+
+    // Initialize start and end data indexes for this thread, while adjusting for
+    // case of non-exact division
+    int first_val_idx = threadIdx.x * local_size;
+    if (threadIdx.x >= remainder)
+        first_val_idx += remainder;
+    int last_val_idx = first_val_idx + local_size;
+
+    // Compute each of the blockDim.x local counts
+    int i;
+    for (i = first_val_idx; i < last_val_idx; i++) {
+        if (vmin <= values[i] && values[i] <= vmax)
+            local_counts[threadIdx.x]++;
+    }
+
+    // Wait for local optima arrays to be filled
+    __syncthreads();
+
+    // Compute global count, but only in thread 0
+    if (threadIdx.x == 0) {
+        *count = local_counts[0];
+        for (i = 1; i < blockDim.x; i++) {
+            *count += local_counts[i];
+        }
+    }
+
+    return;
 }
 
 
@@ -790,9 +786,8 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         
 	Population * pp_dev;
 	double * temp_double;
-        cudaMalloc(&pp_dev, sizeof(struct Population));
-	
-        cudaMemcpy(&(pp_dev->np), &(pp->np), sizeof(int), cudaMemcpyHostToDevice);	
+    cudaMalloc(&pp_dev, sizeof(struct Population));
+    cudaMemcpy(&(pp_dev->np), &(pp->np), sizeof(int), cudaMemcpyHostToDevice);	
 
 	cudaMalloc(&temp_double, N * sizeof(double));
 	cudaMemcpy(temp_double, pp->weight, N * sizeof(double), cudaMemcpyHostToDevice);
@@ -817,11 +812,11 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 	cudaMalloc(&temp_double, N * sizeof(double));
 	cudaMemcpy(temp_double, pp->vy, N * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(&(pp_dev->vy), &temp_double, sizeof(double *), cudaMemcpyHostToDevice);
-        temp_double = NULL;
+    temp_double = NULL;
 
 	SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp_dev, g_forces);
 
-        cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
         
 	ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces, timebit);
 	cudaDeviceSynchronize();
@@ -914,122 +909,121 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, dou
 
 __global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max)
 {
-  if (threadIdx.x >= blockDim.x) {
-    return;
-  }
+    if (threadIdx.x >= blockDim.x) {
+        return;
+    }
 
-  // Declare shared memory arrays for local optima
-  __shared__ int local_mins[SHARED_MEM_MAX_THREADS];
-  __shared__ int local_maxs[SHARED_MEM_MAX_THREADS];
+    // Declare shared memory arrays for local optima
+    __shared__ int local_mins[SHARED_MEM_MAX_THREADS];
+    __shared__ int local_maxs[SHARED_MEM_MAX_THREADS];
 
-  // Initialize size of data chunk for this thread, while adjusting for case of
-  // non-exact division
-  int local_size = total_size / blockDim.x;
-  int remainder = total_size % blockDim.x;
-  if (remainder != 0 && threadIdx.x < remainder)
-    local_size++;
+    // Initialize size of data chunk for this thread, while adjusting for case of
+    // non-exact division
+    int local_size = total_size / blockDim.x;
+    int remainder = total_size % blockDim.x;
+    if (remainder != 0 && threadIdx.x < remainder)
+        local_size++;
 
-  // Initialize start and end data indexes for this thread, while adjusting for
-  // case of non-exact division
-  int first_val_idx = threadIdx.x * local_size;
-  if (threadIdx.x >= remainder)
-    first_val_idx += remainder;
-  int last_val_idx = first_val_idx + local_size;
+    // Initialize start and end data indexes for this thread, while adjusting for
+    // case of non-exact division
+    int first_val_idx = threadIdx.x * local_size;
+    if (threadIdx.x >= remainder)
+        first_val_idx += remainder;
+    int last_val_idx = first_val_idx + local_size;
 
-  // Initialize current local optima
-  int min_loc_curr = values[first_val_idx];
-  int max_loc_curr = values[first_val_idx];
+    // Initialize current local optima
+    int min_loc_curr = values[first_val_idx];
+    int max_loc_curr = values[first_val_idx];
 
-  // Compute each of the blockDim.x local optima
-  int i;
-  for (i = first_val_idx+1; i < last_val_idx; i++) {
-    if (min_loc_curr > values[i])
-      min_loc_curr = values[i];
-    if (max_loc_curr < values[i])
-	    max_loc_curr = values[i];
-  }
-  local_mins[threadIdx.x] = min_loc_curr;
-  local_maxs[threadIdx.x] = max_loc_curr;
+    // Compute each of the blockDim.x local optima
+    int i;
+    for (i = first_val_idx+1; i < last_val_idx; i++) {
+        if (min_loc_curr > values[i])
+            min_loc_curr = values[i];
+        if (max_loc_curr < values[i])
+	        max_loc_curr = values[i];
+    }
+    local_mins[threadIdx.x] = min_loc_curr;
+    local_maxs[threadIdx.x] = max_loc_curr;
 
-  // Wait for local optima arrays to be filled
-  __syncthreads();
+    // Wait for local optima arrays to be filled
+    __syncthreads();
 
   // Find global optima among local ones, but only in thread 0
-  if (threadIdx.x == 0) {
-    int min_glob_curr = local_mins[0];
-    int max_glob_curr = local_maxs[0];
-    for (i = 1; i < blockDim.x; i++) {
-      if (min_glob_curr > local_mins[i])
-        min_glob_curr = local_mins[i];
-      if (max_glob_curr < local_maxs[i])
-	      max_glob_curr = local_maxs[i];
+    if (threadIdx.x == 0) {
+        int min_glob_curr = local_mins[0];
+        int max_glob_curr = local_maxs[0];
+        for (i = 1; i < blockDim.x; i++) {
+            if (min_glob_curr > local_mins[i])
+                min_glob_curr = local_mins[i];
+            if (max_glob_curr < local_maxs[i])
+    	        max_glob_curr = local_maxs[i];
+        }
+        *min = min_glob_curr;
+        *max = max_glob_curr;
     }
-    *min = min_glob_curr;
-    *max = max_glob_curr;
-  }
-
-  return;
+    return;
 }
 
 
 __global__ void MinMaxDoubleVal(int total_size, double *values, double *min, double *max)
 {
 
-  if (threadIdx.x >= blockDim.x) {
-	  return;
-  }
-
-  // Declare shared memory arrays for local optima
-  __shared__ double local_mins[SHARED_MEM_MAX_THREADS];
-  __shared__ double local_maxs[SHARED_MEM_MAX_THREADS];
-
-  // Initialize size of data chunk for this thread, while adjusting for case of
-  // non-exact division
-  int local_size = total_size / blockDim.x;
-  int remainder = total_size % blockDim.x;
-  if (remainder != 0 && threadIdx.x < remainder)
-    local_size++;
-
-  // Initialize start and end data indexes for this thread, while adjusting for
-  // case of non-exact division
-  int first_val_idx = threadIdx.x * local_size;
-  if (threadIdx.x >= remainder)
-    first_val_idx += remainder;
-  int last_val_idx = first_val_idx + local_size;
-
-  // Initialize current local optima
-  double min_loc_curr = values[first_val_idx];
-  double max_loc_curr = values[first_val_idx];
-
-  // Compute each of the blockDim.x local optima
-  int i;
-  for (i = first_val_idx+1; i < last_val_idx; i++) {
-    if (min_loc_curr > values[i])
-      min_loc_curr = values[i];
-    if (max_loc_curr < values[i])
-	    max_loc_curr = values[i];
-  }
-  local_mins[threadIdx.x] = min_loc_curr;
-  local_maxs[threadIdx.x] = max_loc_curr;
-
-  // Wait for local optima arrays to be filled
-  __syncthreads();
-
-  // Find global optima among local ones, but only in thread 0
-  if (threadIdx.x == 0) {
-    double min_glob_curr = local_mins[0];
-    double max_glob_curr = local_maxs[0];
-    for (i = 1; i < blockDim.x; i++) {
-      if (min_glob_curr > local_mins[i])
-        min_glob_curr = local_mins[i];
-      if (max_glob_curr < local_maxs[i])
-	      max_glob_curr = local_maxs[i];
+    if (threadIdx.x >= blockDim.x) {
+        return;
     }
-    *min = min_glob_curr;
-    *max = max_glob_curr;
-  }
 
-  return;
+    // Declare shared memory arrays for local optima
+    __shared__ double local_mins[SHARED_MEM_MAX_THREADS];
+    __shared__ double local_maxs[SHARED_MEM_MAX_THREADS];
+
+    // Initialize size of data chunk for this thread, while adjusting for case of
+    // non-exact division
+    int local_size = total_size / blockDim.x;
+    int remainder = total_size % blockDim.x;
+    if (remainder != 0 && threadIdx.x < remainder)
+        local_size++;
+
+    // Initialize start and end data indexes for this thread, while adjusting for
+    // case of non-exact division
+    int first_val_idx = threadIdx.x * local_size;
+    if (threadIdx.x >= remainder)
+        first_val_idx += remainder;
+    int last_val_idx = first_val_idx + local_size;
+
+    // Initialize current local optima
+    double min_loc_curr = values[first_val_idx];
+    double max_loc_curr = values[first_val_idx];
+
+    // Compute each of the blockDim.x local optima
+    int i;
+    for (i = first_val_idx+1; i < last_val_idx; i++) {
+        if (min_loc_curr > values[i])
+            min_loc_curr = values[i];
+        if (max_loc_curr < values[i])
+	       max_loc_curr = values[i];
+    }
+    local_mins[threadIdx.x] = min_loc_curr;
+    local_maxs[threadIdx.x] = max_loc_curr;
+
+    // Wait for local optima arrays to be filled
+    __syncthreads();
+
+    // Find global optima among local ones, but only in thread 0
+    if (threadIdx.x == 0) {
+        double min_glob_curr = local_mins[0];
+        double max_glob_curr = local_maxs[0];
+        for (i = 1; i < blockDim.x; i++) {
+            if (min_glob_curr > local_mins[i])
+                min_glob_curr = local_mins[i];
+            if (max_glob_curr < local_maxs[i])
+  	            max_glob_curr = local_maxs[i];
+        }
+        *min = min_glob_curr;
+        *max = max_glob_curr;
+    }
+
+    return;
 }
 
 
@@ -1124,7 +1118,7 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
     // Run kernel with optimal number of threads
     int n_threads = sqrt(N);  // minimum for x + N/x
     if (n_threads > SHARED_MEM_MAX_THREADS)
-      n_threads = SHARED_MEM_MAX_THREADS;
+        n_threads = SHARED_MEM_MAX_THREADS;
   
     MinMaxIntVal<<<1, n_threads>>>(N, v_dev, rmin_dev, rmax_dev);  // shared memory only works in the same block
     cudaDeviceSynchronize();
@@ -1236,10 +1230,10 @@ int main(int argc, char *argv[]){
   // Run kernel with optimal number of threads
   int n_threads = sqrt(N);  // minimum for x + N/x
   if (n_threads > SHARED_MEM_MAX_THREADS)
-    n_threads = SHARED_MEM_MAX_THREADS;
+      n_threads = SHARED_MEM_MAX_THREADS;
   
-  MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev);  // shared memory only works in the same block
-  cudaDeviceSynchronize();
+    MinMaxIntVal<<<1, n_threads>>>(N, values_dev, vmin_dev, vmax_dev);  // shared memory only works in the same block
+    cudaDeviceSynchronize();
   
     cudaMemcpy(&vmin, vmin_dev, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(&vmax, vmax_dev, sizeof(int), cudaMemcpyDeviceToHost);
@@ -1294,8 +1288,8 @@ int main(int argc, char *argv[]){
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
 
     cudaError_t error = cudaGetLastError();
-    
-  // Compute evolution of the particle population
+
+    // Compute evolution of the particle population
 
     temp = NULL;  
     cudaMalloc(&temp, population_count * sizeof(double));
@@ -1322,49 +1316,49 @@ int main(int argc, char *argv[]){
     cudaMemcpy(&temp, &(Particles_dev->vy), sizeof(double *), cudaMemcpyDeviceToHost);
     cudaMemcpy(Particles.vy, temp, population_count * sizeof(double), cudaMemcpyDeviceToHost);
 
-  // MIN-MAX
-  // Initialize containers and device copies
-  double *rmin_dev, *rmax_dev;
-  double rmin, rmax;
+    // MIN-MAX
+    // Initialize containers and device copies
+    double *rmin_dev, *rmax_dev;
+    double rmin, rmax;
   
-  cudaMalloc(&rmin_dev, sizeof(double));
-  cudaMalloc(&rmax_dev, sizeof(double));
+    cudaMalloc(&rmin_dev, sizeof(double));
+    cudaMalloc(&rmax_dev, sizeof(double));
  
     // Run kernel with optimal number of threads
-  n_threads = sqrt(Particles.np);  // minimum for x + N/x
-  if (n_threads > SHARED_MEM_MAX_THREADS)
-	  n_threads = SHARED_MEM_MAX_THREADS;
+    n_threads = sqrt(Particles.np);  // minimum for x + N/x
+    if (n_threads > SHARED_MEM_MAX_THREADS)
+	    n_threads = SHARED_MEM_MAX_THREADS;
   
-  double * weight_dev;
+    double * weight_dev;
  
     cudaMalloc(&weight_dev, Particles.np * sizeof(double));
     cudaMemcpy(weight_dev, (Particles.weight), Particles.np * sizeof(double), cudaMemcpyHostToDevice);
     
     MinMaxDoubleVal<<<1, n_threads>>>(Particles.np, weight_dev, rmin_dev, rmax_dev); // shared memory only works in the same block
 
-  cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
   
-  cudaMemcpy(&rmin, rmin_dev, sizeof(double), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&rmax, rmax_dev, sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&rmin, rmin_dev, sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&rmax, rmax_dev, sizeof(double), cudaMemcpyDeviceToHost);
   
     printf("SystemEvolution...\n");
     SystemEvolution (&ParticleGrid, &Particles, MaxSteps, TimeBit, rmin, rmax);
     
-  cudaFree(GenFieldGrid_dev);
-  cudaFree(values_dev);
-  cudaFree(TimeBit_dev);
-  cudaFree(Particles_dev);
-  cudaFree(vmin_dev);
-  cudaFree(vmax_dev);
-  cudaFree(ParticleGrid_dev);
-  cudaFree(temp);
-  cudaFree(rmin_dev);
-  cudaFree(rmax_dev);
-  cudaFree(rmin_dev);
-  cudaFree(rmax_dev);
-  cudaFree(weight_dev);
-  
-  time(&t1);
+    cudaFree(GenFieldGrid_dev);
+    cudaFree(values_dev);
+    cudaFree(TimeBit_dev);
+    cudaFree(Particles_dev);
+    cudaFree(vmin_dev);
+    cudaFree(vmax_dev);
+    cudaFree(ParticleGrid_dev);
+    cudaFree(temp);
+    cudaFree(rmin_dev);
+    cudaFree(rmax_dev);
+    cudaFree(rmin_dev);
+    cudaFree(rmax_dev);
+    cudaFree(weight_dev);
+
+    time(&t1);
     fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
     fprintf(stdout, "Computations ended in %lf seconds\n", difftime(t1, t0));
 
