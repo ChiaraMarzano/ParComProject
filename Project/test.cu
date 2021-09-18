@@ -188,10 +188,8 @@ void ParticleStats(struct Population * p, int t) {
     */
 
     FILE *stats;
-    double w, xg, yg, wmin, wmax;
     double returns[5];
     double *stats_dev;
-    int i;
 
     cudaMalloc(&stats_dev, 5 * sizeof(double));
 
