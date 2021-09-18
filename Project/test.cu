@@ -241,6 +241,8 @@ void ParticleStats(struct Population * p, int t) {
             returns[2], returns[3], returns[4]);
     fclose(stats);
 
+    cudaFree(stats_dev);
+    cudaFree(temp);
 }
 
 
@@ -824,7 +826,9 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 	ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces, timebit);
 	cudaDeviceSynchronize();
 
+    cudaFree(g_forces);
 	cudaFree(pp_dev);
+    cudaFree(temp_double);
     }
 }   // end SystemEvolution
 
@@ -879,7 +883,6 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, dou
     cudaMalloc(&temp, N * sizeof(int));
     cudaMemcpy(&temp, &(pgrid_dev->Values), sizeof(int *), cudaMemcpyDeviceToHost);
     cudaMemcpy(pgrid->Values, temp, N * sizeof(int), cudaMemcpyDeviceToHost);
-    cudaFree(temp);
     
     wint = rmax - rmin;
     Dx = pgrid->Xe - pgrid->Xs;
@@ -902,6 +905,10 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, dou
     sprintf(name, "stage%3.3d\0", step);
     if (step <= 0) { vmin = vmax = 0; }
     IntVal2ppm(pgrid->EX, pgrid->EY, pgrid->Values, &vmin, &vmax, name);
+
+    cudaFree(temp);
+    cudaFree(pgrid_dev);
+    cudaFree(v_dev);
 } // end ParticleScreen
 
 
@@ -1111,6 +1118,7 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
     int N = s1 * s2;
     cudaMalloc(&rmin_dev, sizeof(int));
     cudaMalloc(&rmax_dev, sizeof(int));
+    // TODO doesn't v_dev need cudaMalloc()?
     cudaMemcpy(v_dev, idata, N * sizeof(int), cudaMemcpyHostToDevice);
 
     // Run kernel with optimal number of threads
@@ -1157,6 +1165,10 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
     // strcat(jname, ".jpg\0");
     // sprintf(command, "convert %s %s\0", fname, jname);
     // system(command);
+
+    cudaFree(rmin_dev);
+    cudaFree(rmax_dev);
+    cudaFree(v_dev);
 
     return;
 } // end IntVal2ppm
@@ -1206,7 +1218,7 @@ int main(int argc, char *argv[]){
 
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
 
-    //cudaMemcpy(GenFieldGrid.Values, values_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(GenFieldGrid.Values, values_dev, N * sizeof(int), cudaMemcpyDeviceToHost);  // TODO ?
     cudaMemcpy(TimeBit_dev, &TimeBit, sizeof(double), cudaMemcpyHostToDevice); 
     
     // Particle population initialization
@@ -1241,7 +1253,7 @@ int main(int argc, char *argv[]){
 
     cudaMemcpy(&(Particles.np), &(Particles_dev->np), sizeof(int), cudaMemcpyDeviceToHost);
 
-    // Allocating ParticleGrid on device
+    // Allocating ParticleGrid on device // TODO why is this repeated?
     cudaMalloc(&ParticleGrid_dev, sizeof(struct i2dGrid));
     cudaMemcpy(ParticleGrid_dev, &ParticleGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
        
@@ -1282,12 +1294,8 @@ int main(int argc, char *argv[]){
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
 
     cudaError_t error = cudaGetLastError();
-  // Free memory
-  cudaFree(vmin_dev);
-  cudaFree(vmax_dev);
     
   // Compute evolution of the particle population
-
 
     temp = NULL;  
     cudaMalloc(&temp, population_count * sizeof(double));
@@ -1342,15 +1350,19 @@ int main(int argc, char *argv[]){
     printf("SystemEvolution...\n");
     SystemEvolution (&ParticleGrid, &Particles, MaxSteps, TimeBit, rmin, rmax);
     
-  //TODO: check that all alloced are freed
   cudaFree(GenFieldGrid_dev);
-  cudaFree(TimeBit_dev);
-  cudaFree(weight_dev);
   cudaFree(values_dev);
+  cudaFree(TimeBit_dev);
   cudaFree(Particles_dev);
+  cudaFree(vmin_dev);
+  cudaFree(vmax_dev);
   cudaFree(ParticleGrid_dev);
+  cudaFree(temp);
   cudaFree(rmin_dev);
   cudaFree(rmax_dev);
+  cudaFree(rmin_dev);
+  cudaFree(rmax_dev);
+  cudaFree(weight_dev);
   
   time(&t1);
     fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
