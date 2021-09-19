@@ -763,8 +763,6 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
     double *g_forces;
     cudaMalloc(&g_forces, 2 * pp->np * sizeof(double));
 
-
-
     dim3 threads_per_block (32, 32, 1); // 32 * 32 = 1024, maximum number of threads per block
     dim3 number_of_blocks (32 * num_SMs, 32 * num_SMs, 1); // (32 * 80) < 65535, maximum number of blocks per grid dimension
     dim3 threads_per_block_uni (512, 1, 1); // most efficient parameter for parallelization
@@ -832,13 +830,12 @@ __global__ void InitializeEmptyGridInt(struct i2dGrid *pgrid){
     for (int ix = idx; ix < pgrid->EX; ix+=stridex) {
         for (int iy = idy; iy < pgrid->EY; iy+=stridey) {
             pgrid->Values[index2D(ix, iy, pgrid->EX)] = 0;
-	}
+	    }
     }
 }
 
 void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, double rmin, double rmax) {
     // Distribute a particle population in a grid for visualization purposes
-
     int ix, iy, Xdots, Ydots;
     int n, wp;
     int static vmin, vmax;
@@ -1177,15 +1174,14 @@ int main(int argc, char *argv[]){
 
     int N = GenFieldGrid.EX * GenFieldGrid.EY;
 
-    //allocation of device variables to be used in kernels
-
+    // allocation of device variables to be used in kernels
     cudaMalloc(&values_dev, N * sizeof(int));
     cudaMalloc(&TimeBit_dev, sizeof(double));
 
-    //copying memory from host to device
+    // copying memory from host to device
     cudaMemcpy(GenFieldGrid_dev, &GenFieldGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
 
-    //get number of multiprocessors to use in allocation of grids to further improve the performance
+    // get number of multiprocessors to use in allocation of grids to further improve the performance
     int deviceId;
     int num_SMs;
 
@@ -1194,18 +1190,15 @@ int main(int argc, char *argv[]){
     printf("GeneratingField...\n");
 
     // GenFieldGrid
-
     dim3 threads_per_block (32, 32, 1); // 32 * 32 = 1024, maximum number of threads per block
     dim3 number_of_blocks (32 * num_SMs, 32 * num_SMs, 1); // (32 * 80) < 65535, maximum number of blocks per grid dimension
 
     GeneratingField <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, MaxIters, values_dev);
-
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
 
     cudaMemcpy(TimeBit_dev, &TimeBit, sizeof(double), cudaMemcpyHostToDevice);
 
     // Particle population initialization
-
     Population * Particles_dev;
     cudaMalloc(&Particles_dev, sizeof(struct Population));
 
@@ -1269,13 +1262,9 @@ int main(int argc, char *argv[]){
     printf("ParticleGeneration...\n");
 
     ParticleGeneration <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, ParticleGrid_dev, Particles_dev, values_dev, vmin, vmax);
-
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
 
-    cudaError_t error = cudaGetLastError();
-
     // Compute evolution of the particle population
-
     temp_dev = NULL;
     cudaMalloc(&temp_dev, population_count * sizeof(double));
     cudaMemcpy(&temp_dev, &(Particles_dev->weight), sizeof(double *), cudaMemcpyDeviceToHost);
