@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <sys/time.h>
 
 #define SHARED_MEM_MAX_THREADS 1024
 
@@ -1158,14 +1159,12 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
 
 
 int main(int argc, char *argv[]){
-#include <time.h>
-    time_t t0, t1;
+    struct timespec t0, t1;
 
     cudaGetDevice(&deviceId);
     cudaDeviceGetAttribute(&num_SMs, cudaDevAttrMultiProcessorCount, deviceId);
 
-    time(&t0);
-    fprintf(stdout, "Starting at: %s", asctime(localtime(&t0)));
+    clock_gettime(CLOCK_MONOTONIC_RAW, &t0);
 
     InitGrid("Particles.inp");
 
@@ -1332,9 +1331,9 @@ int main(int argc, char *argv[]){
     cudaFree(rmax_dev);
     cudaFree(weight_dev);
 
-    time(&t1);
-    fprintf(stdout, "Ending   at: %s", asctime(localtime(&t1)));
-    fprintf(stdout, "Computations ended in %lf seconds\n", difftime(t1, t0));
+    clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
+    unsigned long long microseconds = (t1.tv_sec - t0.tv_sec) * 1000000 + (t1.tv_nsec - t0.tv_nsec) / 1000;
+    printf("Computations ended in %lu microseconds\n", microseconds);
 
     fprintf(stdout, "End of program!\n");
 
