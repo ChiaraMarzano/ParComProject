@@ -763,7 +763,7 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
 	p1.vy = pp->vy[i];
 	
 	for (j = idy; j < pp->np; j+=stridey) {
-            if (j != i) {
+            if (j > i) {
 		p2.weight = pp->weight[j];
 		p2.x = pp->x[j];
 		p2.y = pp->y[j];
