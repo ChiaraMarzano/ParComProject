@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include <sys/time.h>
 
 struct i2dGrid
@@ -804,7 +805,7 @@ int main( int argc, char *argv[])    /* FinalApplication */
    
     clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
     unsigned long long microseconds = (t1.tv_sec - t0.tv_sec) * 1000000 + (t1.tv_nsec - t0.tv_nsec) / 1000;
-    printf("Computations ended in %lu microseconds\n", microseconds);
+    printf("Computations ended in %llu microseconds\n", microseconds);
 
    fprintf(stdout,"End of program!\n");
 
