@@ -64,7 +64,6 @@ void print_particle(struct particle p) {
 
 struct Population {
     int np;
-    int * pop_count;
     double *weight, *x, *y, *vx, *vy; // particles have a position and few other properties
 } Particles;
 
@@ -200,25 +199,52 @@ void ParticleStats(struct Population * p, int t) {
     double * temp_dev;
     Population * p_dev;
 
+
+    cudaMalloc(&p_dev, sizeof(struct Population));
+    //weight
+    cudaMalloc(&temp_dev, p->np * sizeof(double)); 
+    cudaMemcpy(&(p_dev->weight), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+    
+    temp_dev = NULL;
     cudaMalloc(&temp_dev, p->np * sizeof(double));
     cudaMemcpy(temp_dev, p->weight, p->np * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(&(p_dev->weight), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
-
+  
+    //x
+    temp_dev = NULL;
+    cudaMalloc(&temp_dev, p->np * sizeof(double));
+    cudaMemcpy(&(p_dev->x), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+    
     temp_dev = NULL;
     cudaMalloc(&temp_dev, p->np * sizeof(double));
     cudaMemcpy(temp_dev, p->x, p->np * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(&(p_dev->x), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
 
+    //y 
+    temp_dev = NULL;
+    cudaMalloc(&temp_dev, p->np * sizeof(double));
+    cudaMemcpy(&(p_dev->y), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+    
     temp_dev = NULL;
     cudaMalloc(&temp_dev, p->np * sizeof(double));
     cudaMemcpy(temp_dev, p->y, p->np * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(&(p_dev->y), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
-
+    
+    //vx
+    temp_dev = NULL;
+    cudaMalloc(&temp_dev, p->np * sizeof(double));
+    cudaMemcpy(&(p_dev->vx), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+    
     temp_dev = NULL;
     cudaMalloc(&temp_dev, p->np * sizeof(double));
     cudaMemcpy(temp_dev, p->vx, p->np * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(&(p_dev->vx), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
-
+    
+    //vy
+    temp_dev = NULL;
+    cudaMalloc(&temp_dev, p->np * sizeof(double));
+    cudaMemcpy(&(p_dev->vy), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+    
     temp_dev = NULL;
     cudaMalloc(&temp_dev, p->np * sizeof(double));
     cudaMemcpy(temp_dev, p->vy, p->np * sizeof(double), cudaMemcpyHostToDevice);
@@ -234,7 +260,10 @@ void ParticleStats(struct Population * p, int t) {
     if (n_threads > SHARED_MEM_MAX_THREADS)
         n_threads = SHARED_MEM_MAX_THREADS;
     ParallelComputeStats<<<1, n_threads>>>(p_dev, stats_dev);
-    cudaMemcpy(stats_dev, returns, 5 * sizeof(double), cudaMemcpyDeviceToHost);
+    
+    cudaDeviceSynchronize();
+
+    cudaMemcpy(returns, stats_dev, 5 * sizeof(double), cudaMemcpyDeviceToHost);
     // note: stats = [wmin, wmax, w, xg, yg]
 
     fprintf(stats, "At iteration %d particles: %d; wmin, wmax = %lf, %lf;\n",
@@ -711,7 +740,7 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
     int i, j;
     double f[2];
     //variables to compute force between p1 and p2
-    double force, d2, dx, dy;
+    double force, d2, dx, dy, f0_tot, f1_tot;
     static double k = 0.001, tiny = (double) 1.0 / (double) 1000000.0;
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -719,9 +748,13 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
     int stridey = gridDim.y * blockDim.y;
 
+    if (idx >= pp->np || idy >= pp->np){
+    	return;
+    }
+
     for (i = idx; i < pp->np; i+=stridex) {
-        forces[index2D(0, i, 2)] = 0.0;
-        forces[index2D(1, i, 2)] = 0.0;
+        f0_tot = 0.0;
+        f1_tot = 0.0;
 
 	p1.weight = pp->weight[i];
 	p1.x = pp->x[i];
@@ -746,14 +779,15 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces){
 		f[0] = force * dx / sqrt(d2);
 		f[1] = force * dy / sqrt(d2);
 
-		forces[index2D(0, i, 2)] = forces[index2D(0, i, 2)] + f[0];
-                forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
-                forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
-                forces[index2D(0, i, 2)] = forces[index2D(0, i, 2)] + f[0];
-                forces[index2D(1, i, 2)] = forces[index2D(1, i, 2)] + f[1];
+		f0_tot += f[0];
+		f1_tot += f[1];
 	    }
         }
+
+    	forces[index2D(0, i, 2)] = f0_tot;
+    	forces[index2D(1, i, 2)] = f1_tot;
     }
+    return;
 }
 
 
@@ -779,33 +813,54 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 
 	Population * pp_dev;
 	double * temp_dev;
-    cudaMalloc(&pp_dev, sizeof(struct Population));
-    cudaMemcpy(&(pp_dev->np), &(pp->np), sizeof(int), cudaMemcpyHostToDevice);	
-
-	cudaMalloc(&temp_dev, N * sizeof(double));
-	cudaMemcpy(temp_dev, pp->weight, N * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMalloc(&pp_dev, sizeof(struct Population));
+        cudaMemcpy(&(pp_dev->np), &(pp->np), sizeof(int), cudaMemcpyHostToDevice);	
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
 	cudaMemcpy(&(pp_dev->weight), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
 
 	temp_dev = NULL;
-	cudaMalloc(&temp_dev, N * sizeof(double));
-	cudaMemcpy(temp_dev, pp->x, N * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(temp_dev, pp->weight, pp->np * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(&(pp_dev->weight), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+	
+	temp_dev = NULL;
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
 	cudaMemcpy(&(pp_dev->x), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
-
+	
 	temp_dev = NULL;
-	cudaMalloc(&temp_dev, N * sizeof(double));
-	cudaMemcpy(temp_dev, pp->y, N * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(temp_dev, pp->x, pp->np * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(&(pp_dev->x), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+	
+	temp_dev = NULL;
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
 	cudaMemcpy(&(pp_dev->y), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
-
+	
 	temp_dev = NULL;
-	cudaMalloc(&temp_dev, N * sizeof(double));
-	cudaMemcpy(temp_dev, pp->vx, N * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(temp_dev, pp->y, pp->np * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(&(pp_dev->y), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+	
+	temp_dev = NULL;
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
 	cudaMemcpy(&(pp_dev->vx), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
 	
 	temp_dev = NULL;
-	cudaMalloc(&temp_dev, N * sizeof(double));
-	cudaMemcpy(temp_dev, pp->vy, N * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(temp_dev, pp->vx, pp->np * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(&(pp_dev->vx), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+	
+	temp_dev = NULL;
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
 	cudaMemcpy(&(pp_dev->vy), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
-    temp_dev = NULL;
+	
+	temp_dev = NULL;
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(temp_dev, pp->vy, pp->np * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(&(pp_dev->vy), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
+    	
+	temp_dev = NULL;
+	//
 
 	SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp_dev, g_forces);
 
@@ -821,16 +876,16 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 }   // end SystemEvolution
 
 
-__global__ void InitializeEmptyGridInt(struct i2dGrid *pgrid){
+__global__ void InitializeEmptyGridInt(int EX, int EY, int * values){
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stridex = gridDim.x * blockDim.x;
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
     int stridey = gridDim.y * blockDim.y;
 
-    for (int ix = idx; ix < pgrid->EX; ix+=stridex) {
-        for (int iy = idy; iy < pgrid->EY; iy+=stridey) {
-            pgrid->Values[index2D(ix, iy, pgrid->EX)] = 0;
+    for (int iy = idy; iy < EY; iy+=stridey) {
+        for (int ix = idx; ix < EX; ix+=stridex) {
+            values[index2D(ix, iy, EX)] = 0;
 	    }
     }
 }
@@ -851,9 +906,8 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, dou
     dim3 number_of_blocks (2, 2, 1); // (2 * 80) < 65535, maximum number of blocks per grid dimension
 
     //initialization of particlegrid.values in device
-    int * temp_dev;
-    cudaMalloc(&temp_dev, N * sizeof(int));
-
+    int * v_host;
+    v_host = (int *) malloc(N * sizeof(int));
     i2dGrid * pgrid_dev;
     int * v_dev;
     cudaMalloc(&pgrid_dev, sizeof(struct i2dGrid));
@@ -863,13 +917,11 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, dou
     cudaMemcpy(&(pgrid_dev->Values), &v_dev, sizeof(int *), cudaMemcpyHostToDevice);
 
     //input should be pointer to i2grid and not to int[], either change the signature or add memcpy to new i2grid * pointer
-    InitializeEmptyGridInt<<<number_of_blocks, threads_per_block>>>(pgrid_dev);
+    InitializeEmptyGridInt<<<number_of_blocks, threads_per_block>>>(pgrid->EX, pgrid->EY, v_dev);
     cudaDeviceSynchronize();
 
-    temp_dev = NULL;
-    cudaMalloc(&temp_dev, N * sizeof(int));
-    cudaMemcpy(&temp_dev, &(pgrid_dev->Values), sizeof(int *), cudaMemcpyDeviceToHost);
-    cudaMemcpy(pgrid->Values, temp_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(v_host, v_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
+    pgrid->Values = v_host;
 
     wint = rmax - rmin;
     Dx = pgrid->Xe - pgrid->Xs;
@@ -893,7 +945,6 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, dou
     if (step <= 0) { vmin = vmax = 0; }
     IntVal2ppm(pgrid->EX, pgrid->EY, pgrid->Values, &vmin, &vmax, name);
 
-    cudaFree(temp_dev);
     cudaFree(pgrid_dev);
     cudaFree(v_dev);
 } // end ParticleScreen
