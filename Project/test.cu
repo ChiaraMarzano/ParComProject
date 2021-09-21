@@ -846,7 +846,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         ParticleStats(pp, t);
 
         //x
-	cudaMalloc(&x_temp, pp->np * sizeof(double));
+        cudaMalloc(&x_temp, pp->np * sizeof(double));
         cudaMemcpy(&(pp_dev->x), &x_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
         x_temp = NULL;
@@ -854,7 +854,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         cudaMemcpy(x_temp, pp->x, pp->np * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(&(pp_dev->x), &x_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
-	//y
+        //y
         cudaMalloc(&y_temp, pp->np * sizeof(double));
         cudaMemcpy(&(pp_dev->y), &y_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
@@ -864,7 +864,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         cudaMemcpy(&(pp_dev->y), &y_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
         //vx
-	cudaMalloc(&vx_temp, pp->np * sizeof(double));
+        cudaMalloc(&vx_temp, pp->np * sizeof(double));
         cudaMemcpy(&(pp_dev->vx), &vx_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
         vx_temp = NULL;
@@ -873,7 +873,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         cudaMemcpy(&(pp_dev->vx), &vx_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
         //vy
-	cudaMalloc(&vy_temp, pp->np * sizeof(double));
+        cudaMalloc(&vy_temp, pp->np * sizeof(double));
         cudaMemcpy(&(pp_dev->vy), &vy_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
         vy_temp = NULL;
@@ -881,25 +881,23 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         cudaMemcpy(vy_temp, pp->vy, pp->np * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(&(pp_dev->vy), &vy_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
-        cudaError_t err = cudaGetLastError(); printf("before InstEv: %s\n", cudaGetErrorString(err));
         SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp_dev, g_forces_0, g_forces_1);
         cudaDeviceSynchronize();
-        err = cudaGetLastError(); printf("amidst:  %s\n", cudaGetErrorString(err));
+
         ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces_0, g_forces_1, timebit);
         cudaDeviceSynchronize();
-        err = cudaGetLastError(); printf("after ComptPop:  %s\n", cudaGetErrorString(err));
 
-	//todo: move back to host memory
-	cudaFree(x_temp);
-	cudaFree(y_temp);
-	cudaFree(vx_temp);
-	cudaFree(vy_temp);
+        //TODO: move back to host memory
+        cudaFree(x_temp);
+        cudaFree(y_temp);
+        cudaFree(vx_temp);
+        cudaFree(vy_temp);
     }
 
-        cudaFree(pp_dev);
-	cudaFree(weight_temp);
-        cudaFree(g_forces_0);
-	cudaFree(g_forces_1);
+    cudaFree(pp_dev);
+    cudaFree(weight_temp);
+    cudaFree(g_forces_0);
+    cudaFree(g_forces_1);
 }   // end SystemEvolution
 
 
@@ -1195,7 +1193,6 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
     cudaMemcpy(&rmin, rmin_dev, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(&rmax, rmax_dev, sizeof(int), cudaMemcpyDeviceToHost);
 
-    printf("vmin %d vmax %d\n\n\n", rmin, rmax);
     if ((*vmin == *vmax) && (*vmin == 0)) {
         *vmin = rmin;
         *vmax = rmax;
