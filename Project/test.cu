@@ -870,13 +870,13 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 
         temp_dev = NULL;
 
+        cudaError_t err = cudaGetLastError(); printf("before InstEv: %s\n", cudaGetErrorString(err));
         SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp_dev, g_forces);
         cudaDeviceSynchronize();
-
-        // cudaError_t err = cudaGetLastError(); printf("before: %s\n", cudaGetErrorString(err));
+        err = cudaGetLastError(); printf("amidst:  %s\n", cudaGetErrorString(err));
         ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces, timebit);
         cudaDeviceSynchronize();
-        // err = cudaGetLastError(); printf("after:  %s\n", cudaGetErrorString(err));
+        err = cudaGetLastError(); printf("after ComptPop:  %s\n", cudaGetErrorString(err));
 
         cudaFree(g_forces);
         cudaFree(pp_dev);
