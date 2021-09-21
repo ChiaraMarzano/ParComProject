@@ -753,9 +753,7 @@ __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid
 
 __global__ void SystemInstantEvolution(struct Population *pp, double *forces_0, double *forces_1){
 
-    struct particle p1, p2;
     int i, j;
-    double f[2];
     //variables to compute force between p1 and p2
     double force, d2, dx, dy, f0_tot, f1_tot;
     static double k = 0.001, tiny = (double) 1.0 / (double) 1000000.0;
@@ -765,37 +763,19 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces_0, 
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
     int stridey = gridDim.y * blockDim.y;
 
-    if (idx >= pp->np || idy >= pp->np) {
-        return;
-    }
-
     for (i = idx; i < pp->np; i+=stridex) {
         f0_tot = 0.0;
         f1_tot = 0.0;
-        p1.weight = pp->weight[i];
-        p1.x = pp->x[i];
-        p1.y = pp->y[i];
-        p1.vx = pp->vx[i];
-        p1.vy = pp->vy[i];
         for (j = idy; j < pp->np; j+=stridey) {
             if (j != i) {
-                p2.weight = pp->weight[j];
-                p2.x = pp->x[j];
-                p2.y = pp->y[j];
-                p2.vx = pp->vx[j];
-                p2.vy = pp->vy[j];
-
-                //force computation between p1 and p2
-                dx = p2.x - p1.x;
-                dy = p2.y - p1.y;
+                // compute force between p1 and p2
+                dx = pp->x[j] - pp->x[i];
+                dy = pp->y[j] - pp->y[i];
                 d2 = dx * dx + dy * dy;  // what if particles get in touch? Simply avoid the case
                 if (d2 < tiny) d2 = tiny;
-                force = (k * p1.weight * p2.weight) / d2;
-                f[0] = force * dx / sqrt(d2);
-                f[1] = force * dy / sqrt(d2);
-
-                f0_tot += f[0];
-                f1_tot += f[1];
+                force = (k * pp->weight[i] * pp->weight[j]) / d2;
+                f0_tot += force * dx / sqrt(d2);
+                f1_tot += force * dy / sqrt(d2);
             }
         }
         forces_0[i] = f0_tot;
@@ -834,8 +814,8 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 
     dim3 threads_per_block (32, 32, 1); // 32 * 32 = 1024, maximum number of threads per block
     dim3 number_of_blocks (32 * num_SMs, 32 * num_SMs, 1); // (32 * 80) < 65535, maximum number of blocks per grid dimension
-    dim3 threads_per_block_uni (512, 1, 1); // most efficient parameter for parallelization
-    dim3 number_of_blocks_uni (32 * num_SMs, 1, 1); // most efficient parameter for parallelization
+    dim3 threads_per_block_uni (1024, 1, 1); // maximum number of threads per block
+    dim3 number_of_blocks_uni (32 * num_SMs, 1, 1);
 
     // compute forces acting on each particle step by step
     for (t = 0; t < mxiter; t++) {
