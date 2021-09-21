@@ -813,8 +813,9 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
     double *g_forces_1;
     cudaMalloc(&g_forces_0, pp->np * sizeof(double));
     cudaMalloc(&g_forces_1, pp->np * sizeof(double));
-   
+  
     Population * pp_dev;
+    double * temp_dev;
     double * weight_temp;
     double * x_temp;
     double * y_temp;
@@ -887,7 +888,28 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces_0, g_forces_1, timebit);
         cudaDeviceSynchronize();
 
-        //TODO: move back to host memory
+
+    	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(&temp_dev, &(pp_dev->weight), sizeof(double *), cudaMemcpyDeviceToHost);
+	cudaMemcpy(pp->weight, temp_dev, pp->np * sizeof(double), cudaMemcpyDeviceToHost);
+	
+    	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(&temp_dev, &(pp_dev->x), sizeof(double *), cudaMemcpyDeviceToHost);
+	cudaMemcpy(pp->x, temp_dev, pp->np * sizeof(double), cudaMemcpyDeviceToHost);
+    	
+	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(&temp_dev, &(pp_dev->y), sizeof(double *), cudaMemcpyDeviceToHost);
+	cudaMemcpy(pp->y, temp_dev, pp->np * sizeof(double), cudaMemcpyDeviceToHost);
+	
+    	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(&temp_dev, &(pp_dev->vx), sizeof(double *), cudaMemcpyDeviceToHost);
+	cudaMemcpy(pp->vx, temp_dev, pp->np * sizeof(double), cudaMemcpyDeviceToHost);
+	
+    	cudaMalloc(&temp_dev, pp->np * sizeof(double));
+	cudaMemcpy(&temp_dev, &(pp_dev->vy), sizeof(double *), cudaMemcpyDeviceToHost);
+	cudaMemcpy(pp->vy, temp_dev, pp->np * sizeof(double), cudaMemcpyDeviceToHost);
+	
+	//TODO: move back to host memory
         cudaFree(x_temp);
         cudaFree(y_temp);
         cudaFree(vx_temp);
