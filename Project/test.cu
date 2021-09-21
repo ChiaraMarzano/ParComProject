@@ -353,6 +353,11 @@ __global__ void ComptPopulation(struct Population *p, double *forces, double tim
     int i;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stridex = gridDim.x * blockDim.x;
+
+    if (idx >= p->np){
+        return;
+    }
+
     for (i = idx; i < p->np; i+=stridex) {
 	    p->x[i] = p->x[i] + (p->vx[i] * timebit) +
                   (0.5 * forces[index2D(0, i, 2)] * timebit * timebit / p->weight[i]);
@@ -618,6 +623,10 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
     int stridey = gridDim.y * blockDim.y;
 
+    if (idx >= Xdots || idy >= Ydots){
+        return;
+    }
+
     for (iy = idy; iy < Ydots; iy+=stridey) {
         for (ix = idx; ix < Xdots; ix+=stridex) {
 		ca = Xinc * ix + Ir;
@@ -707,6 +716,10 @@ __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid
     int stridex = gridDim.x * blockDim.x;
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
     int stridey = gridDim.y * blockDim.y;
+
+    if (idx >= Xdots || idy >= Ydots){
+        return;
+    }
 
     for (iy = idy; iy < Ydots; iy+=stridey) {
         for (ix = idx; ix < Xdots; ix+=stridex) {
@@ -882,6 +895,10 @@ __global__ void InitializeEmptyGridInt(int EX, int EY, int * values){
     int stridex = gridDim.x * blockDim.x;
     int idy = blockIdx.y * blockDim.y + threadIdx.y;
     int stridey = gridDim.y * blockDim.y;
+
+    if (idx >= EX || idy >= EY){
+        return;
+    }
 
     for (int iy = idy; iy < EY; iy+=stridey) {
         for (int ix = idx; ix < EX; ix+=stridex) {
