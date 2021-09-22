@@ -713,7 +713,6 @@ __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid
     Ydots = grid->EY;
 
     // Just count number of particles to be generated
-    vmin = (double) (1 * vmax + 29 * vmin) / 30.0;
     np = pp->np;
     n = 0;
 
@@ -1293,7 +1292,7 @@ int main(int argc, char *argv[]){
 
     cudaMemcpy(&vmin, vmin_dev, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(&vmax, vmax_dev, sizeof(int), cudaMemcpyDeviceToHost);
-    printf("vmin=%d, vmax=%d\n", vmin, vmax);
+    vmin = (double) (1 * vmax + 29 * vmin) / 30.0;
 
     // Allocating ParticleGrid on device
     cudaMalloc(&ParticleGrid_dev, sizeof(struct i2dGrid));
