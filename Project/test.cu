@@ -632,7 +632,7 @@ void ParticleGeneration(struct i2dGrid *grid, struct i2dGrid *pgrid, struct Popu
     // Initialize values_dev to host
     int *values_dev;
     cudaMalloc(&values_dev, N * sizeof(int));
-    cudaMemcpy(values_dev, grid->Values, N * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(values_dev, grid->Values, N * sizeof(int), cudaMemcpyHostToDevice);
 
     // Compute min and max values
     int vmin, vmax;
