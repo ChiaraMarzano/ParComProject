@@ -621,7 +621,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
     Ir = grid->Xs;
     Ii = grid->Ys;
     Xinc = Sr / (double) Xdots;
-    Yinc = Si / (double)Ydots;
+    Yinc = Si / (double) Ydots;
 
     izmn = 9999;
     izmx = -9;
