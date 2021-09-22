@@ -1250,9 +1250,10 @@ int main(int argc, char *argv[]){
 
     // Compute evolution of the particle population
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, np * sizeof(double));
-    cudaMemcpy(&temp_dev, &(Particles_dev->weight), sizeof(double *), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Particles.weight, temp_dev, np * sizeof(double), cudaMemcpyDeviceToHost);
+    double * weight_dev;
+    cudaMalloc(&weight_dev, np * sizeof(double));
+    cudaMemcpy(&weight_dev, &(Particles_dev->weight), sizeof(double *), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Particles.weight, weight_dev, np * sizeof(double), cudaMemcpyDeviceToHost);
 
     temp_dev = NULL;
     cudaMalloc(&temp_dev, np * sizeof(double));
@@ -1287,12 +1288,7 @@ int main(int argc, char *argv[]){
     if (n_threads > SHARED_MEM_MAX_THREADS)
         n_threads = SHARED_MEM_MAX_THREADS;
 
-    double * weight_dev;
-
-    cudaMalloc(&weight_dev, Particles.np * sizeof(double));
-    cudaMemcpy(weight_dev, (Particles.weight), Particles.np * sizeof(double), cudaMemcpyHostToDevice);
-
-    MinMaxDoubleVal<<<1, n_threads>>>(Particles.np, weight_dev, rmin_dev, rmax_dev); // shared memory only works in the same block
+    MinMaxDoubleVal<<<1, n_threads>>>(np, weight_dev, rmin_dev, rmax_dev); // shared memory only works in the same block
 
     cudaDeviceSynchronize();
 
