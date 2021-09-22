@@ -610,21 +610,18 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
     int ix, iy, iz;
     double ca, cb, za, zb;
     double rad, zan, zbn;
-    double Xinc, Sr, Ir;
-    int izmn, izmx;
-    int Xdots, Ydots;
 
-    Xdots = grid->EX;
-    Ydots = grid->EY;
-    Sr = grid->Xe - grid->Xs;
-    Si = grid->Ye - grid->Ys;
-    Ir = grid->Xs;
-    Ii = grid->Ys;
-    Xinc = Sr / (double) Xdots;
-    Yinc = Si / (double) Ydots;
+    int Xdots = grid->EX;
+    int Ydots = grid->EY;
+    double Sr = grid->Xe - grid->Xs;
+    double Si = grid->Ye - grid->Ys;
+    double Ir = grid->Xs;
+    double Ii = grid->Ys;
+    double Xinc = Sr / (double) Xdots;
+    double Yinc = Si / (double) Ydots;
 
-    izmn = 9999;
-    izmx = -9;
+    int izmn = 9999;
+    int izmx = -9;
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stridex = gridDim.x * blockDim.x;
@@ -1296,6 +1293,7 @@ int main(int argc, char *argv[]){
 
     cudaMemcpy(&vmin, vmin_dev, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(&vmax, vmax_dev, sizeof(int), cudaMemcpyDeviceToHost);
+    printf("vmin=%d, vmax=%d\n", vmin, vmax);
 
     // Allocating ParticleGrid on device
     cudaMalloc(&ParticleGrid_dev, sizeof(struct i2dGrid));
