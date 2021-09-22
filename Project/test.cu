@@ -307,48 +307,12 @@ __global__ void MinMaxDoubleVal(int total_size, double *values, double *min, dou
 
 void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name);
 
-__global__ void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy);
-
 __global__ void GeneratingField(struct i2dGrid *grid, int * iterations, int * values);
-
-__global__ void CountPopulation(int total_size, int *values, int *count, int vmin, int vmax);
 
 __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values, int vmin, int vmax);
 
 void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double timebit, double min, double max);
 
-__global__ void ForceCompt(double *f, struct particle p1, struct particle p2);
-
-
-__global__ void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy) {
-    /*
-     * define a new object with passed parameters
-    */
-    p->weight = weight;
-    p->x = x;
-    p->y = y;
-    p->vx = vx;
-    p->vy = vy;
-
-}
-
-
-__global__ void ForceCompt(double * f, struct particle p1, struct particle p2) {
-    /*
-     * Compute force acting on p1 by p1-p2 interactions
-     *
-    */
-    double force, d2, dx, dy;
-    static double k = 0.001, tiny = (double) 1.0 / (double) 1000000.0;
-
-    dx = p2.x - p1.x;
-    dy = p2.y - p1.y;
-    d2 = dx * dx + dy * dy;  // what if particles get in touch? Simply avoid the case
-    if (d2 < tiny) d2 = tiny;
-    force = (k * p1.weight * p2.weight) / d2;
-    f[0] = force * dx / sqrt(d2);
-    f[1] = force * dy / sqrt(d2);
-}
 
 __global__ void ComptPopulation(struct Population *p, double *forces_0, double *forces_1, double timebit) {
     /*
@@ -657,51 +621,6 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
 }
 
 
-__global__ void CountPopulation(int total_size, int *values, int *count, int vmin, int vmax)
-{
-    if (threadIdx.x >= blockDim.x) {
-        return;
-    }
-
-    // Declare shared memory arrays for local counts
-    __shared__ int local_counts[SHARED_MEM_MAX_THREADS];
-
-    // Initialize size of data chunk for this thread, while adjusting for case of
-    // non-exact division
-    int local_size = total_size / blockDim.x;
-    int remainder = total_size % blockDim.x;
-    if (remainder != 0 && threadIdx.x < remainder)
-        local_size++;
-
-    // Initialize start and end data indexes for this thread, while adjusting for
-    // case of non-exact division
-    int first_val_idx = threadIdx.x * local_size;
-    if (threadIdx.x >= remainder)
-        first_val_idx += remainder;
-    int last_val_idx = first_val_idx + local_size;
-
-    // Compute each of the blockDim.x local counts
-    int i;
-    for (i = first_val_idx; i < last_val_idx; i++) {
-        if (vmin <= values[i] && values[i] <= vmax)
-            local_counts[threadIdx.x]++;
-    }
-
-    // Wait for local optima arrays to be filled
-    __syncthreads();
-
-    // Compute global count, but only in thread 0
-    if (threadIdx.x == 0) {
-        *count = local_counts[0];
-        for (i = 1; i < blockDim.x; i++) {
-            *count += local_counts[i];
-        }
-    }
-
-    return;
-}
-
-
 __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values, int vmin, int vmax) {
     // A system of particles is generated according to the value distribution of grid.Values
     int v;
@@ -810,8 +729,6 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
     cudaMemcpy(weight_temp, pp->weight, pp->np * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(&(pp_dev->weight), &weight_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
-    dim3 threads_per_block (32, 32, 1); // 32 * 32 = 1024, maximum number of threads per block
-    dim3 number_of_blocks (32 * num_SMs, 32 * num_SMs, 1); // (32 * 80) < 65535, maximum number of blocks per grid dimension
     dim3 threads_per_block_uni (1024, 1, 1); // maximum number of threads per block
     dim3 number_of_blocks_uni (32 * num_SMs, 1, 1);
 
@@ -1297,11 +1214,18 @@ int main(int argc, char *argv[]){
     // Allocating ParticleGrid on device
     cudaMalloc(&ParticleGrid_dev, sizeof(struct i2dGrid));
     cudaMemcpy(ParticleGrid_dev, &ParticleGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
+    cudaMemcpy(GenFieldGrid.Values, values_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
 
-    CountPopulation<<<1, n_threads>>>(N, values_dev, &(Particles_dev->np), vmin, vmax);  // shared memory only works in the same block
-    cudaDeviceSynchronize();
-
-    cudaMemcpy(&(Particles.np), &(Particles_dev->np), sizeof(int), cudaMemcpyDeviceToHost);
+    // Just count number of particles to be generated
+    int np = 0, ix, iy, v;
+    for ( ix = 0; ix < GenFieldGrid.EX; ix++ ) {
+        for ( iy = 0; iy < GenFieldGrid.EY; iy++ ) {
+            v = GenFieldGrid.Values[index2D(ix,iy,GenFieldGrid.EX)];
+            if ( v <= vmax && v >= vmin ) np++;
+        }
+    }
+    Particles.np = np;
+    cudaMemcpy(&(Particles_dev->np), &np, sizeof(int), cudaMemcpyHostToDevice);
 
     // Allocating Particles on device
     double * temp_dev;
