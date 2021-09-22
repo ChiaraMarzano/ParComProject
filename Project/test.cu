@@ -760,13 +760,11 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces_0, 
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stridex = gridDim.x * blockDim.x;
-    int idy = blockIdx.y * blockDim.y + threadIdx.y;
-    int stridey = gridDim.y * blockDim.y;
 
     for (i = idx; i < pp->np; i+=stridex) {
         f0_tot = 0.0;
         f1_tot = 0.0;
-        for (j = idy; j < pp->np; j+=stridey) {
+        for (j = 0; j < pp->np; j++) {
             if (j != i) {
                 // compute force between p1 and p2
                 dx = pp->x[j] - pp->x[i];
@@ -861,7 +859,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         cudaMemcpy(vy_temp, pp->vy, pp->np * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(&(pp_dev->vy), &vy_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
-        SystemInstantEvolution<<<number_of_blocks, threads_per_block>>>(pp_dev, g_forces_0, g_forces_1);
+        SystemInstantEvolution<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces_0, g_forces_1);
         cudaDeviceSynchronize();
 
         ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces_0, g_forces_1, timebit);
