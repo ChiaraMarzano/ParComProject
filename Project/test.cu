@@ -617,8 +617,11 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
     Xdots = grid->EX;
     Ydots = grid->EY;
     Sr = grid->Xe - grid->Xs;
+    Si = grid->Ye - grid->Ys;
     Ir = grid->Xs;
+    Ii = grid->Ys;
     Xinc = Sr / (double) Xdots;
+    Yinc = Si / (double)Ydots;
 
     izmn = 9999;
     izmx = -9;
@@ -635,6 +638,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
     for (iy = idy; iy < Ydots; iy+=stridey) {
         for (ix = idx; ix < Xdots; ix+=stridex) {
             ca = Xinc * ix + Ir;
+            cb = Yinc * iy + Ii;
             rad = sqrt(ca * ca * ((double) 1.0 + (cb / ca) * (cb / ca)));
             zan = 0.0;
             zbn = 0.0;
