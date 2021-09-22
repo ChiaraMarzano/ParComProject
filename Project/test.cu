@@ -274,12 +274,12 @@ void ParticleStats(struct Population * p, int t) {
     fclose(stats);
 
     cudaFree(stats_dev);
+    cudaFree(p_dev);
     cudaFree(weight_temp);
     cudaFree(x_temp);
     cudaFree(y_temp);
     cudaFree(vx_temp);
     cudaFree(vy_temp);
-    cudaFree(p_dev);
 }
 
 
@@ -290,7 +290,7 @@ int readrow(char *rg, int nc, FILE *daleg);
 
 void InitGrid(char *InputFile);
 
-void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int s);
+void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int s, double rmin, double rmax);
 
 __global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max);
 
@@ -693,6 +693,7 @@ void ParticleGeneration(struct i2dGrid *grid, struct i2dGrid *pgrid, struct Popu
     }
 
     print_Population(*pp);
+    cudaFree(values_dev);
     cudaFree(vmin_dev);
     cudaFree(vmax_dev);
 } // end ParticleGeneration
@@ -755,10 +756,29 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
     dim3 threads_per_block_uni (1024, 1, 1); // maximum number of threads per block
     dim3 number_of_blocks_uni (32 * num_SMs, 1, 1);
 
+    // Initialize weights_dev to host
+    double *weights_dev;
+    cudaMalloc(&weights_dev, pp->np * sizeof(double));
+    cudaMemcpy(weights_dev, pp->weight, pp->np * sizeof(double), cudaMemcpyHostToDevice);
+
+    // Compute min and max values to pass to ParticleScreen
+    double rmin, rmax;
+    double *rmin_dev, *rmax_dev;
+    cudaMalloc(&rmin_dev, sizeof(double));
+    cudaMalloc(&rmax_dev, sizeof(double));
+    int n_threads = sqrt(pp->np);  // minimum for x + N/x
+    if (n_threads > SHARED_MEM_MAX_THREADS)
+        n_threads = SHARED_MEM_MAX_THREADS;
+    MinMaxDoubleVal<<<1, n_threads>>>(pp->np, weights_dev, rmin_dev, rmax_dev);  // shared memory only works in the same block
+    cudaDeviceSynchronize();
+    cudaMemcpy(&rmin, rmin_dev, sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&rmax, rmax_dev, sizeof(double), cudaMemcpyDeviceToHost);
+    printf("rmin=%f, rmax=%f\n", rmin, rmax);
+
     // compute forces acting on each particle step by step
     for (t = 0; t < mxiter; t++) {
         fprintf(stdout, "Step %d of %d\n", t, mxiter);
-        ParticleScreen(pgrid, pp, t);
+        ParticleScreen(pgrid, pp, t, rmin, rmax);
         // DumpPopulation call frequency may be changed
         if (t % 4 == 0) DumpPopulation(*pp, t);
         ParticleStats(pp, t);
@@ -825,19 +845,20 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         cudaMalloc(&temp_dev, pp->np * sizeof(double));
         cudaMemcpy(&temp_dev, &(pp_dev->vy), sizeof(double *), cudaMemcpyDeviceToHost);
         cudaMemcpy(pp->vy, temp_dev, pp->np * sizeof(double), cudaMemcpyDeviceToHost);
-
-        // TODO: move back to host memory
-        cudaFree(x_temp);
-        cudaFree(y_temp);
-        cudaFree(vx_temp);
-        cudaFree(vy_temp);
     }
 
-    cudaFree(pp_dev);
-    cudaFree(weight_temp);
-    cudaFree(temp_dev);
     cudaFree(g_forces_0);
     cudaFree(g_forces_1);
+    cudaFree(pp_dev);
+    cudaFree(weight_temp);
+    cudaFree(weights_dev);
+    cudaFree(rmin_dev);
+    cudaFree(rmax_dev);
+    cudaFree(x_temp);
+    cudaFree(y_temp);
+    cudaFree(vx_temp);
+    cudaFree(vy_temp);
+    cudaFree(temp_dev);  // TODO why does this raise an error?
 }   // end SystemEvolution
 
 
@@ -859,7 +880,7 @@ __global__ void InitializeEmptyGridInt(int EX, int EY, int * values){
     }
 }
 
-void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step) {
+void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, double rmin, double rmax) {
     // Distribute a particle population in a grid for visualization purposes
     int ix, iy, n, wp;
     int static vmin, vmax;
@@ -887,25 +908,6 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step) {
     cudaMemcpy(v_host, v_dev, N * sizeof(int), cudaMemcpyDeviceToHost);
     pgrid->Values = v_host;
 
-    // Initialize weights_dev to host
-    double *weights_dev;
-    cudaMalloc(&weights_dev, pp->np * sizeof(double));
-    cudaMemcpy(weights_dev, pp->weight, pp->np * sizeof(double), cudaMemcpyHostToDevice);
-
-    // Compute min and max values
-    double rmin, rmax;
-    double *rmin_dev, *rmax_dev;
-    cudaMalloc(&rmin_dev, sizeof(double));
-    cudaMalloc(&rmax_dev, sizeof(double));
-    int n_threads = sqrt(pp->np);  // minimum for x + N/x
-    if (n_threads > SHARED_MEM_MAX_THREADS)
-        n_threads = SHARED_MEM_MAX_THREADS;
-    MinMaxDoubleVal<<<1, n_threads>>>(pp->np, weights_dev, rmin_dev, rmax_dev);  // shared memory only works in the same block
-    cudaDeviceSynchronize();
-    cudaMemcpy(&rmin, rmin_dev, sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(&rmax, rmax_dev, sizeof(double), cudaMemcpyDeviceToHost);
-    printf("rmin=%f, rmax=%f\n", rmin, rmax);
-
     wint = rmax - rmin;
     Dx = pgrid->Xe - pgrid->Xs;
     Dy = pgrid->Ye - pgrid->Ys;
@@ -929,8 +931,6 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step) {
     IntVal2ppm(pgrid->EX, pgrid->EY, pgrid->Values, &vmin, &vmax, name);
 
     cudaFree(v_dev);
-    cudaFree(rmin_dev);
-    cudaFree(rmax_dev);
 } // end ParticleScreen
 
 
