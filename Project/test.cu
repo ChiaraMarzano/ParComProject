@@ -262,7 +262,6 @@ void ParticleStats(struct Population * p, int t) {
     if (n_threads > SHARED_MEM_MAX_THREADS)
         n_threads = SHARED_MEM_MAX_THREADS;
     ParallelComputeStats<<<1, n_threads>>>(p_dev, stats_dev);
-
     cudaDeviceSynchronize();
 
     cudaMemcpy(returns, stats_dev, 5 * sizeof(double), cudaMemcpyDeviceToHost);
@@ -891,7 +890,7 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step) {
     // Initialize weights_dev to host
     double *weights_dev;
     cudaMalloc(&weights_dev, pp->np * sizeof(double));
-    cudaMemcpy(weights_dev, pp->weight, pp->np * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(weights_dev, pp->weight, pp->np * sizeof(double), cudaMemcpyHostToDevice);
 
     // Compute min and max values
     double rmin, rmax;
