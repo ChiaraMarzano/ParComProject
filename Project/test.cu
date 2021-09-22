@@ -99,6 +99,7 @@ void DumpPopulation(struct Population p, int t) {
 }
 
 
+
 __global__ void ParallelComputeStats(struct Population *pop, double *returns)
 {
     if (threadIdx.x >= blockDim.x) {
@@ -189,6 +190,7 @@ __global__ void ParallelComputeStats(struct Population *pop, double *returns)
     returns[4] = global_yg_curr / global_wsum_curr;
     return;
 }
+
 
 
 void ParticleStats(struct Population * p, int t) {
@@ -283,32 +285,6 @@ void ParticleStats(struct Population * p, int t) {
 }
 
 
-// Functions prototypes  // TODO sort properly
-int rowlen(char *riga);
-
-int readrow(char *rg, int nc, FILE *daleg);
-
-void InitGrid(char *InputFile);
-
-void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int s, double rmin, double rmax);
-
-__global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max);
-
-__global__ void MinMaxDoubleVal(int total_size, double *values, double *min, double *max);
-
-void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name);
-
-__global__ void GeneratingField(struct i2dGrid *grid, int * iterations, int * values);
-
-void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp);
-
-void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double timebit);
-
-__global__ void SystemInstantEvolution(struct Population *pp, double *forces_0, double *forces_1);
-
-__global__ void ComptPopulation(struct Population *p, double *forces_0, double *forces_1, double timebit);
-
-
 
 __global__ void ComptPopulation(struct Population *p, double *forces_0, double *forces_1, double timebit) {
     /*
@@ -332,6 +308,7 @@ __global__ void ComptPopulation(struct Population *p, double *forces_0, double *
         p->vy[i] = p->vy[i] + forces_1[i] * timebit / p->weight[i];
     }
 }
+
 
 
 void InitGrid(char *InputFile) {
@@ -560,7 +537,8 @@ void InitGrid(char *InputFile) {
 }
 
 
-__global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
+
+__global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int *values) {
     /*
    !  Compute "generating" points
    !  Output:
@@ -615,6 +593,7 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
     }
     return;
 }
+
 
 
 void ParticleGeneration(struct i2dGrid *grid, struct i2dGrid *pgrid, struct Population *pp)
@@ -699,6 +678,7 @@ void ParticleGeneration(struct i2dGrid *grid, struct i2dGrid *pgrid, struct Popu
 } // end ParticleGeneration
 
 
+
 __global__ void SystemInstantEvolution(struct Population *pp, double *forces_0, double *forces_1) {
 
     int i, j;
@@ -729,6 +709,7 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces_0, 
     }
     return;
 }
+
 
 
 void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double timebit) {
@@ -862,6 +843,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
 }   // end SystemEvolution
 
 
+
 __global__ void InitializeEmptyGridInt(int EX, int EY, int * values){
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -879,6 +861,8 @@ __global__ void InitializeEmptyGridInt(int EX, int EY, int * values){
         }
     }
 }
+
+
 
 void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, double rmin, double rmax) {
     // Distribute a particle population in a grid for visualization purposes
@@ -932,6 +916,7 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, dou
 
     cudaFree(v_dev);
 } // end ParticleScreen
+
 
 
 __global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max)
@@ -991,6 +976,7 @@ __global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max)
     }
     return;
 }
+
 
 
 __global__ void MinMaxDoubleVal(int total_size, double *values, double *min, double *max)
@@ -1054,6 +1040,7 @@ __global__ void MinMaxDoubleVal(int total_size, double *values, double *min, dou
 }
 
 
+
 int rowlen(char *riga) {
     int lungh;
     char c;
@@ -1076,6 +1063,7 @@ int rowlen(char *riga) {
 }
 
 
+
 int readrow(char *rg, int nc, FILE *daleg) {
     //int rowlen(), lrg;
     int lrg;
@@ -1088,6 +1076,7 @@ int readrow(char *rg, int nc, FILE *daleg) {
     }
     return (lrg);
 }
+
 
 
 void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
