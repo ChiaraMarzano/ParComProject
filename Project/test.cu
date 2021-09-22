@@ -288,7 +288,6 @@ void ParticleStats(struct Population * p, int t) {
 int MaxIters, MaxSteps;
 
 double TimeBit;   // Evolution time steps
-double * TimeBit_dev;
 
 i2dGrid * GenFieldGrid_dev;
 i2dGrid * ParticleGrid_dev;
@@ -1167,7 +1166,6 @@ int main(int argc, char *argv[]){
 
     // allocation of device variables to be used in kernels
     cudaMalloc(&values_dev, N * sizeof(int));
-    cudaMalloc(&TimeBit_dev, sizeof(double));
 
     // copying memory from host to device
     cudaMemcpy(GenFieldGrid_dev, &GenFieldGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
@@ -1180,8 +1178,6 @@ int main(int argc, char *argv[]){
 
     GeneratingField <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, MaxIters, values_dev);
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
-
-    cudaMemcpy(TimeBit_dev, &TimeBit, sizeof(double), cudaMemcpyHostToDevice);
 
     // Particle population initialization
     Population * Particles_dev;
@@ -1313,14 +1309,11 @@ int main(int argc, char *argv[]){
 
     cudaFree(GenFieldGrid_dev);
     cudaFree(values_dev);
-    cudaFree(TimeBit_dev);
     cudaFree(Particles_dev);
     cudaFree(vmin_dev);
     cudaFree(vmax_dev);
     cudaFree(ParticleGrid_dev);
     cudaFree(temp_dev);
-    cudaFree(rmin_dev);
-    cudaFree(rmax_dev);
     cudaFree(rmin_dev);
     cudaFree(rmax_dev);
     cudaFree(weight_dev);
