@@ -286,6 +286,21 @@ void ParticleStats(struct Population * p, int t) {
 
 
 
+// Functions prototypes
+int rowlen(char *riga);
+
+int readrow(char *rg, int nc, FILE *daleg);
+
+void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, double rmin, double rmax);
+
+__global__ void MinMaxIntVal(int total_size, int *values, int *min, int *max);
+
+__global__ void MinMaxDoubleVal(int total_size, double *values, double *min, double *max);
+
+void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name);
+
+
+
 __global__ void ComptPopulation(struct Population *p, double *forces_0, double *forces_1, double timebit) {
     /*
      * compute effects of forces on particles in a interval time
@@ -624,7 +639,6 @@ void ParticleGeneration(struct i2dGrid *grid, struct i2dGrid *pgrid, struct Popu
     cudaDeviceSynchronize();
     cudaMemcpy(&vmin, vmin_dev, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(&vmax, vmax_dev, sizeof(int), cudaMemcpyDeviceToHost);
-    printf("vmin=%d, vmax=%d\n", vmin, vmax);
 
     // Just count number of particles to be generated
     vmin = (double) (1 * vmax + 29 * vmin) / 30.0;
@@ -754,7 +768,6 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
     cudaDeviceSynchronize();
     cudaMemcpy(&rmin, rmin_dev, sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpy(&rmax, rmax_dev, sizeof(double), cudaMemcpyDeviceToHost);
-    printf("rmin=%f, rmax=%f\n", rmin, rmax);
 
     // compute forces acting on each particle step by step
     for (t = 0; t < mxiter; t++) {
