@@ -622,13 +622,10 @@ __global__ void GeneratingField(struct i2dGrid *grid, int MaxIt, int * values) {
 
 __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid, struct Population *pp, int * values, int vmin, int vmax) {
     // A system of particles is generated according to the value distribution of grid.Values
-    int v;
-    int Xdots, Ydots;
-    int ix, iy, np, n;
+    int v, ix, iy, np, n;
     double p;
-
-    Xdots = grid->EX;
-    Ydots = grid->EY;
+    int Xdots = grid->EX;
+    int Ydots = grid->EY;
 
     // Just count number of particles to be generated
     np = pp->np;
@@ -643,8 +640,8 @@ __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid
         return;
     }
 
-    for (iy = idy; iy < Ydots; iy+=stridey) {
-        for (ix = idx; ix < Xdots; ix+=stridex) {
+    for (ix = idx; ix < Xdots; ix+=stridex) {
+        for (iy = idy; iy < Ydots; iy+=stridey) {
             v = values[index2D(ix, iy, Xdots)];
             if (v <= vmax && v >= vmin) {
                 pp->weight[n] = v * 10.0;
@@ -1220,28 +1217,26 @@ int main(int argc, char *argv[]){
 
     // Allocating Particles on device
     double * temp_dev;
-    int population_count = Particles.np;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&(Particles_dev->weight), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
 
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&(Particles_dev->x), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
 
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&(Particles_dev->y), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
 
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&(Particles_dev->vx), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
 
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&(Particles_dev->vy), &temp_dev, sizeof(double *), cudaMemcpyHostToDevice);
 
     // Allocating Particles on host
-
     Particles.weight = (double *) malloc(Particles.np * sizeof(double));
     Particles.x = (double *) malloc(Particles.np * sizeof(double));
     Particles.y = (double *) malloc(Particles.np * sizeof(double));
@@ -1255,29 +1250,29 @@ int main(int argc, char *argv[]){
 
     // Compute evolution of the particle population
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&temp_dev, &(Particles_dev->weight), sizeof(double *), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Particles.weight, temp_dev, population_count * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Particles.weight, temp_dev, np * sizeof(double), cudaMemcpyDeviceToHost);
 
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&temp_dev, &(Particles_dev->x), sizeof(double *), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Particles.x, temp_dev, population_count * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Particles.x, temp_dev, np * sizeof(double), cudaMemcpyDeviceToHost);
 
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&temp_dev, &(Particles_dev->y), sizeof(double *), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Particles.y, temp_dev, population_count * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Particles.y, temp_dev, np * sizeof(double), cudaMemcpyDeviceToHost);
 
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&temp_dev, &(Particles_dev->vx), sizeof(double *), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Particles.vx, temp_dev, population_count * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Particles.vx, temp_dev, np * sizeof(double), cudaMemcpyDeviceToHost);
 
     temp_dev = NULL;
-    cudaMalloc(&temp_dev, population_count * sizeof(double));
+    cudaMalloc(&temp_dev, np * sizeof(double));
     cudaMemcpy(&temp_dev, &(Particles_dev->vy), sizeof(double *), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Particles.vy, temp_dev, population_count * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Particles.vy, temp_dev, np * sizeof(double), cudaMemcpyDeviceToHost);
 
     // MIN-MAX
     // Initialize containers and device copies
