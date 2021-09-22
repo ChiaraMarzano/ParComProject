@@ -644,7 +644,7 @@ __global__ void ParticleGeneration(struct i2dGrid * grid, struct i2dGrid * pgrid
         for (iy = idy; iy < Ydots; iy+=stridey) {
             v = values[index2D(ix, iy, Xdots)];
             if (v <= vmax && v >= vmin) {
-                pp->weight[n] = v * 10.0;
+		pp->weight[n] = v * 10.0;
 
                 p = (pgrid->Xe - pgrid->Xs) * ix / (Xdots * 2.0);
                 pp->x[n] = pgrid->Xs + ((pgrid->Xe - pgrid->Xs) / 4.0) + p;
@@ -1245,7 +1245,7 @@ int main(int argc, char *argv[]){
 
     printf("ParticleGeneration...\n");
 
-    ParticleGeneration <<<number_of_blocks, threads_per_block>>> (GenFieldGrid_dev, ParticleGrid_dev, Particles_dev, values_dev, vmin, vmax);
+    ParticleGeneration <<<1, 1>>> (GenFieldGrid_dev, ParticleGrid_dev, Particles_dev, values_dev, vmin, vmax);
     cudaDeviceSynchronize(); // Wait for the GPU as all the steps in main need to be sequential
 
     // Compute evolution of the particle population
