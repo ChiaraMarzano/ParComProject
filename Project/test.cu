@@ -1152,6 +1152,7 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name) {
 int main(int argc, char *argv[]){
     struct timespec t0, t1;
 
+    // get number of multiprocessors to use in allocation of grids to further improve the performance
     cudaGetDevice(&deviceId);
     cudaDeviceGetAttribute(&num_SMs, cudaDevAttrMultiProcessorCount, deviceId);
 
@@ -1171,12 +1172,6 @@ int main(int argc, char *argv[]){
     // copying memory from host to device
     cudaMemcpy(GenFieldGrid_dev, &GenFieldGrid, sizeof(struct i2dGrid), cudaMemcpyHostToDevice);
 
-    // get number of multiprocessors to use in allocation of grids to further improve the performance
-    int deviceId;
-    int num_SMs;
-
-    cudaGetDevice(&deviceId);
-    cudaDeviceGetAttribute(&num_SMs, cudaDevAttrMultiProcessorCount, deviceId);
     printf("GeneratingField...\n");
 
     // GenFieldGrid
