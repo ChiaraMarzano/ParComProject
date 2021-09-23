@@ -788,7 +788,7 @@ int main( int argc, char *argv[])    /* FinalApplication */
 {
    struct timespec t0, t1;
    clock_gettime(CLOCK_MONOTONIC_RAW, &t0);
-   
+
    InitGrid("Particles.inp");
 
    // GenFieldGrid initialization
@@ -803,9 +803,9 @@ int main( int argc, char *argv[])    /* FinalApplication */
    printf("SystemEvolution...\n");
    SystemEvolution(&ParticleGrid, &Particles, MaxSteps);
    
-    clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
-    unsigned long long microseconds = (t1.tv_sec - t0.tv_sec) * 1000000 + (t1.tv_nsec - t0.tv_nsec) / 1000;
-    printf("Computations ended in %llu microseconds\n", microseconds);
+   clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
+   unsigned long long microseconds = (t1.tv_sec - t0.tv_sec) * 1000000 + (t1.tv_nsec - t0.tv_nsec) / 1000;
+   printf("Computations ended in %llu microseconds\n", microseconds);
 
    fprintf(stdout,"End of program!\n");
 
