@@ -1,0 +1,7 @@
+# Output images
+*.jpg
+*.ppm
+
+# Population dumps
+*.dmp
+Population.sta
