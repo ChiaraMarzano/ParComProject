@@ -852,7 +852,6 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
     cudaFree(y_temp);
     cudaFree(vx_temp);
     cudaFree(vy_temp);
-    cudaFree(temp_dev);  // TODO why does this raise an error?
 }   // end SystemEvolution
 
 
@@ -898,7 +897,6 @@ void ParticleScreen(struct i2dGrid *pgrid, struct Population * pp, int step, dou
     cudaMalloc(&v_dev, N * sizeof(int));
     cudaMemcpy(v_dev, pgrid->Values, N * sizeof(int), cudaMemcpyHostToDevice);
 
-    // TODO?: input should be pointer to i2grid and not to int[], either change the signature or add memcpy to new i2grid * pointer
     InitializeEmptyGridInt<<<number_of_blocks, threads_per_block>>>(pgrid->EX, pgrid->EY, v_dev);
     cudaDeviceSynchronize();
 
