@@ -317,9 +317,9 @@ __global__ void ComptPopulation(struct Population *p, double *forces_0, double *
     for (i = idx; i < p->np; i+=stridex) {
         p->x[i] = p->x[i] + (p->vx[i] * timebit) +
                   (0.5 * forces_0[i] * timebit * timebit / p->weight[i]);
-        p->vx[i] = p->vx[i] + forces_1[i] * timebit / p->weight[i];
+        p->vx[i] = p->vx[i] + forces_0[i] * timebit / p->weight[i];
         p->y[i] = p->y[i] + (p->vy[i] * timebit) +
-                  (0.5 * forces_0[i] * timebit * timebit / p->weight[i]);
+                  (0.5 * forces_1[i] * timebit * timebit / p->weight[i]);
         p->vy[i] = p->vy[i] + forces_1[i] * timebit / p->weight[i];
     }
 }
