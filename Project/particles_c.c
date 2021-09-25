@@ -40,52 +40,52 @@
 
 struct i2dGrid
 {
-    int EX, EY; // extensions in X and Y directions 
-    double Xs, Xe, Ys, Ye; // initial and final value for X and Y directions
-    int *Values; // 2D matrix of values
+	int EX, EY; // extensions in X and Y directions 
+	double Xs, Xe, Ys, Ye; // initial and final value for X and Y directions
+	int *Values; // 2D matrix of values
 } GenFieldGrid, ParticleGrid;
 
 void print_i2dGrid(struct i2dGrid g) 
 {
-    printf("i2dGrid: EX, EY = %d, %d\n",g.EX,g.EY);
-    printf("         Xs, Xe = %lf, %lf; Ys, Ye = %lf, %lf\n",g.Xs,g.Xe,g.Ys,g.Ye);
-    
+	printf("i2dGrid: EX, EY = %d, %d\n",g.EX,g.EY);
+	printf("         Xs, Xe = %lf, %lf; Ys, Ye = %lf, %lf\n",g.Xs,g.Xe,g.Ys,g.Ye);
+	
 }
 
 struct particle {
-       double weight, x, y, vx, vy, fx, fy;
+	   double weight, x, y, vx, vy, fx, fy;
 };
 
 void print_particle(struct particle p) 
 {
-    printf("particle: weight=%lf, x,y=(%lf,%lf), vx,vy=(%lf,%lf), fx,fy=(%lf,%lf)\n",
-        p.weight, p.x, p.y, p.vx, p.vy, p.fx, p.fy);
+	printf("particle: weight=%lf, x,y=(%lf,%lf), vx,vy=(%lf,%lf), fx,fy=(%lf,%lf)\n",
+	    p.weight, p.x, p.y, p.vx, p.vy, p.fx, p.fy);
 }
 
 struct Population
 {
-    int np;
-    double *weight, *x, *y, *vx, *vy; // particles have a position and few other properties
+	int np;
+	double *weight, *x, *y, *vx, *vy; // particles have a position and few other properties
 } Particles;
-    
+	
 void print_Population(struct Population p) 
 {
-    printf("Population: np = %d\n",p.np);
+	printf("Population: np = %d\n",p.np);
 }
 
 void DumpPopulation(struct Population p, int t)
 {
    /*
     * save population values on file 
-   */   
+   */	
    char fname[80];
    FILE *dump;
    
    sprintf(fname,"Population%4.4d.dmp\0",t);
    dump = fopen(fname,"w");
    if ( dump == NULL ) {
-      fprintf(stderr,"Error write open file %s\n",fname);
-      exit(1);
+	  fprintf(stderr,"Error write open file %s\n",fname);
+	  exit(1);
    }
    fwrite(&p.np,sizeof((int)1),1,dump);
    fwrite(p.weight,sizeof((double)1.0),p.np,dump);
@@ -96,10 +96,10 @@ void DumpPopulation(struct Population p, int t)
 
 void ParticleStats(struct Population p, int t)
 {
-    /*
-     * write a file with statistics on population 
-    */
-    
+	/*
+	 * write a file with statistics on population 
+	*/
+	
    FILE *stats;
    double w, xg, yg, wmin, wmax; 
    int i;
@@ -107,24 +107,24 @@ void ParticleStats(struct Population p, int t)
    if ( t <= 0 ) stats = fopen("Population.sta","w"); 
      else stats = fopen("Population.sta","a"); // append new data
    if ( stats == NULL ) {
-      fprintf(stderr,"Error append/open file Population.sta\n");
-      exit(1);
+	  fprintf(stderr,"Error append/open file Population.sta\n");
+	  exit(1);
    }
    w = xg = yg = 0.0;
    wmin = wmax = p.weight[0];
    for ( i = 0; i < p.np; i++ ) {
-       if ( wmin > p.weight[i] ) wmin = p.weight[i];
-       if ( wmax < p.weight[i] ) wmax = p.weight[i];
-       w = w + p.weight[i];
-       xg = xg + (p.weight[i] * p.x[i]);
-       yg = yg + (p.weight[i] * p.y[i]);
+	   if ( wmin > p.weight[i] ) wmin = p.weight[i];
+	   if ( wmax < p.weight[i] ) wmax = p.weight[i];
+	   w = w + p.weight[i];
+	   xg = xg + (p.weight[i] * p.x[i]);
+	   yg = yg + (p.weight[i] * p.y[i]);
    }
    xg = xg / w;  yg = yg / w;
    fprintf(stats,"At iteration %d particles: %d; wmin, wmax = %lf, %lf;\n",
                t,p.np,wmin,wmax);
    fprintf(stats,"   total weight = %lf; CM = (%10.4lf,%10.4lf)\n",
                w,xg,yg);
-   fclose(stats);   
+   fclose(stats);	
 
 }
 
@@ -152,50 +152,50 @@ void ForceCompt(double *f, struct particle p1, struct particle p2);
 
 void newparticle(struct particle *p, double weight, double x, double y, double vx, double vy)
 {
-    /*
-     * define a new object with passed parameters
-    */
-    p->weight = weight;  p->x = x;  p->y = y;  p->vx = vx;  p->vy = vy;
+	/*
+	 * define a new object with passed parameters
+	*/
+	p->weight = weight;  p->x = x;  p->y = y;  p->vx = vx;  p->vy = vy;
 
 }
 
 void ForceCompt(double *f, struct particle p1, struct particle p2)
 {
-    /*
-     * Compute force acting on p1 by p1-p2 interactions 
-     * 
-    */
-    double force, d, d2, dx, dy;
-    static double k=0.001, tiny=(double)1.0/(double)1000000.0;
-    
-    dx = p2.x - p1.x; dy = p2.y - p1.y;
-    d2 = dx*dx + dy*dy;  // what if particles get in touch? Simply avoid the case
-    if ( d2 < tiny ) d2 = tiny;
-    force = (k * p1.weight * p2.weight) / d2;
-    f[0] = force * dx / sqrt(d2); f[1] = force * dy / sqrt(d2);
+	/*
+	 * Compute force acting on p1 by p1-p2 interactions 
+	 * 
+	*/
+	double force, d, d2, dx, dy;
+	static double k=0.001, tiny=(double)1.0/(double)1000000.0;
+	
+	dx = p2.x - p1.x; dy = p2.y - p1.y;
+	d2 = dx*dx + dy*dy;  // what if particles get in touch? Simply avoid the case
+	if ( d2 < tiny ) d2 = tiny;
+	force = (k * p1.weight * p2.weight) / d2;
+	f[0] = force * dx / sqrt(d2); f[1] = force * dy / sqrt(d2);
 }
 
 void ComptPopulation(struct Population *p, double *forces)
 {
-    /*
-     * compute effects of forces on particles in a interval time
-     * 
-    */
-    int i;
-    double x0, x1, y0, y1;
-    
-    for ( i = 0; i < p->np; i++ ) {
-        x0 = p->x[i]; y0 = p->y[i]; 
-                
-        p->x[i] = p->x[i] + (p->vx[i]*TimeBit) + 
-             (0.5*forces[index2D(0,i,2)]*TimeBit*TimeBit/p->weight[i]);
-        p->vx[i] = p->vx[i] + forces[index2D(0,i,2)]*TimeBit/p->weight[i];
+	/*
+	 * compute effects of forces on particles in a interval time
+	 * 
+	*/
+	int i;
+	double x0, x1, y0, y1;
+	
+	for ( i = 0; i < p->np; i++ ) {
+		x0 = p->x[i]; y0 = p->y[i]; 
+				
+		p->x[i] = p->x[i] + (p->vx[i]*TimeBit) + 
+		     (0.5*forces[index2D(0,i,2)]*TimeBit*TimeBit/p->weight[i]);
+		p->vx[i] = p->vx[i] + forces[index2D(0,i,2)]*TimeBit/p->weight[i];
 
-        p->y[i] = p->y[i] + (p->vy[i]*TimeBit) + 
-             (0.5*forces[index2D(1,i,2)]*TimeBit*TimeBit/p->weight[i]);     
-        p->vy[i] = p->vy[i] + forces[index2D(1,i,2)]*TimeBit/p->weight[i];
+		p->y[i] = p->y[i] + (p->vy[i]*TimeBit) + 
+		     (0.5*forces[index2D(1,i,2)]*TimeBit*TimeBit/p->weight[i]);		
+		p->vy[i] = p->vy[i] + forces[index2D(1,i,2)]*TimeBit/p->weight[i];
 
-    }
+	}
 }
 
 
@@ -227,118 +227,118 @@ void InitGrid(char *InputFile)
    nv = 0; iv = 0; dv = 0.0;
    while ( 1 )
       {
-          if ( readrow(filerow, 80, inpunit) < 1 ) {
-              fprintf(stderr,"Error reading input file\n");
-              exit(-1);
-          }
-          if ( filerow[0] == '#' ) continue;
-          if ( nv <= 0 ) {
-            if ( sscanf(filerow,"%d",&iv) < 1 ) {
+      	  if ( readrow(filerow, 80, inpunit) < 1 ) {
+      	  	  fprintf(stderr,"Error reading input file\n");
+      	  	  exit(-1);
+      	  }
+      	  if ( filerow[0] == '#' ) continue;
+      	  if ( nv <= 0 ) {
+			if ( sscanf(filerow,"%d",&iv) < 1 ) {
               fprintf(stderr,"Error reading EX from string\n");
-              exit(-1);
-            }
-            GenFieldGrid.EX = iv; nv = 1;
-            continue;
-          }
-          if ( nv == 1 ) {
-            if ( sscanf(filerow,"%d",&iv) < 1 ) {
+      	  	  exit(-1);
+			}
+			GenFieldGrid.EX = iv; nv = 1;
+			continue;
+		  }
+		  if ( nv == 1 ) {
+			if ( sscanf(filerow,"%d",&iv) < 1 ) {
               fprintf(stderr,"Error reading EY from string\n");
-              exit(-1);
-            }
-            GenFieldGrid.EY = iv; nv++;
-            continue;
+      	  	  exit(-1);
+			}
+			GenFieldGrid.EY = iv; nv++;
+			continue;
 
-          }
-          if ( nv == 2 ) {
-            if ( sscanf(filerow,"%lf",&dv) < 1 ) {
+		  }
+		  if ( nv == 2 ) {
+			if ( sscanf(filerow,"%lf",&dv) < 1 ) {
               fprintf(stderr,"Error reading GenFieldGrid.Xs from string\n");
-              exit(-1);
-            }
-            GenFieldGrid.Xs = dv; nv++;
-                        continue;
+      	  	  exit(-1);
+			}
+			GenFieldGrid.Xs = dv; nv++;
+						continue;
 
-          }
-          if ( nv == 3 ) {
-            if ( sscanf(filerow,"%lf",&dv) < 1 ) {
+		  }
+		  if ( nv == 3 ) {
+			if ( sscanf(filerow,"%lf",&dv) < 1 ) {
               fprintf(stderr,"Error reading GenFieldGrid.Xe from string\n");
-              exit(-1);
-            }
-            GenFieldGrid.Xe = dv; nv++;
-                        continue;
+      	  	  exit(-1);
+			}
+			GenFieldGrid.Xe = dv; nv++;
+						continue;
 
-          }
-          if ( nv == 4 ) {
-            if ( sscanf(filerow,"%lf",&dv) < 1 ) {
+		  }
+		  if ( nv == 4 ) {
+			if ( sscanf(filerow,"%lf",&dv) < 1 ) {
               fprintf(stderr,"Error reading GenFieldGrid.Ys from string\n");
-              exit(-1);
-            }
-            GenFieldGrid.Ys = dv; nv++;
-                        continue;
+      	  	  exit(-1);
+			}
+			GenFieldGrid.Ys = dv; nv++;
+						continue;
 
-          }
-          if ( nv == 5 ) {
-            if ( sscanf(filerow,"%lf",&dv) < 1 ) {
+		  }
+		  if ( nv == 5 ) {
+			if ( sscanf(filerow,"%lf",&dv) < 1 ) {
               fprintf(stderr,"Error reading GenFieldGrid.Ye from string\n");
-              exit(-1);
-            }
-            GenFieldGrid.Ye = dv; nv++;
-                        continue;
+      	  	  exit(-1);
+			}
+			GenFieldGrid.Ye = dv; nv++;
+						continue;
 
-          }
-          if ( nv <= 6 ) {
-            if ( sscanf(filerow,"%d",&iv) < 1 ) {
+		  }
+      	  if ( nv <= 6 ) {
+			if ( sscanf(filerow,"%d",&iv) < 1 ) {
               fprintf(stderr,"Error reading ParticleGrid.EX from string\n");
-              exit(-1);
-            }
-            ParticleGrid.EX = iv; nv++;
-            continue;
-          }
-          if ( nv == 7 ) {
-            if ( sscanf(filerow,"%d",&iv) < 1 ) {
+      	  	  exit(-1);
+			}
+			ParticleGrid.EX = iv; nv++;
+			continue;
+		  }
+		  if ( nv == 7 ) {
+			if ( sscanf(filerow,"%d",&iv) < 1 ) {
               fprintf(stderr,"Error reading ParticleGrid.EY from string\n");
-              exit(-1);
-            }
-            ParticleGrid.EY = iv; nv++;
-            continue;
+      	  	  exit(-1);
+			}
+			ParticleGrid.EY = iv; nv++;
+			continue;
 
-          }
-          if ( nv == 8 ) {
-            if ( sscanf(filerow,"%lf",&dv) < 1 ) {
+		  }
+		  if ( nv == 8 ) {
+			if ( sscanf(filerow,"%lf",&dv) < 1 ) {
               fprintf(stderr,"Error reading ParticleGrid.Xs from string\n");
-              exit(-1);
-            }
-            ParticleGrid.Xs = dv; nv++;
-                        continue;
+      	  	  exit(-1);
+			}
+			ParticleGrid.Xs = dv; nv++;
+						continue;
 
-          }
-          if ( nv == 9 ) {
-            if ( sscanf(filerow,"%lf",&dv) < 1 ) {
+		  }
+		  if ( nv == 9 ) {
+			if ( sscanf(filerow,"%lf",&dv) < 1 ) {
               fprintf(stderr,"Error reading ParticleGrid.Xe from string\n");
-              exit(-1);
-            }
-            ParticleGrid.Xe = dv; nv++;
-                        continue;
+      	  	  exit(-1);
+			}
+			ParticleGrid.Xe = dv; nv++;
+						continue;
 
-          }
-          if ( nv == 10 ) {
-            if ( sscanf(filerow,"%lf",&dv) < 1 ) {
+		  }
+		  if ( nv == 10 ) {
+			if ( sscanf(filerow,"%lf",&dv) < 1 ) {
               fprintf(stderr,"Error reading ParticleGrid.Ys from string\n");
-              exit(-1);
-            }
-            ParticleGrid.Ys = dv; nv++;
-                        continue;
+      	  	  exit(-1);
+			}
+			ParticleGrid.Ys = dv; nv++;
+						continue;
 
-          }
-          if ( nv == 11 ) {
-            if ( sscanf(filerow,"%lf",&dv) < 1 ) {
+		  }
+		  if ( nv == 11 ) {
+			if ( sscanf(filerow,"%lf",&dv) < 1 ) {
               fprintf(stderr,"Error reading ParticleGrid.Ye from string\n");
-              exit(-1);
-            }
-            ParticleGrid.Ye = dv;
-            break;
-          }
+      	  	  exit(-1);
+			}
+			ParticleGrid.Ye = dv;
+			break;
+		  }
       }
-      
+	  
       /*
         Now read MaxIters
       */
@@ -346,16 +346,16 @@ void InitGrid(char *InputFile)
       while ( 1 )
       { 
           if ( readrow(filerow, 80, inpunit) < 1 ) {
-              fprintf(stderr,"Error reading MaxIters from input file\n");
-              exit(-1);
-          }
-          if ( filerow[0] == '#' || rowlen(filerow) < 1 ) continue;
+      	  	  fprintf(stderr,"Error reading MaxIters from input file\n");
+      	  	  exit(-1);
+      	  }
+      	  if ( filerow[0] == '#' || rowlen(filerow) < 1 ) continue;
           if ( sscanf(filerow,"%d",&MaxIters) < 1 ) {
               fprintf(stderr,"Error reading MaxIters from string\n");
-              exit(-1);
-          }
-          printf("MaxIters = %d\n",MaxIters);
-          break;          
+      	  	  exit(-1);
+      	  }
+      	  printf("MaxIters = %d\n",MaxIters);
+      	  break;      	  
       }
       
       /*
@@ -365,16 +365,16 @@ void InitGrid(char *InputFile)
       while ( 1 )
       { 
           if ( readrow(filerow, 80, inpunit) < 1 ) {
-              fprintf(stderr,"Error reading MaxSteps from input file\n");
-              exit(-1);
-          }
-          if ( filerow[0] == '#' || rowlen(filerow) < 1 ) continue;
+      	  	  fprintf(stderr,"Error reading MaxSteps from input file\n");
+      	  	  exit(-1);
+      	  }
+      	  if ( filerow[0] == '#' || rowlen(filerow) < 1 ) continue;
           if ( sscanf(filerow,"%d",&MaxSteps) < 1 ) {
               fprintf(stderr,"Error reading MaxSteps from string\n");
-              exit(-1);
-          }
-          printf("MaxSteps = %d\n",MaxSteps);
-          break;          
+      	  	  exit(-1);
+      	  }
+      	  printf("MaxSteps = %d\n",MaxSteps);
+      	  break;      	  
       }
       
       /*
@@ -384,17 +384,17 @@ void InitGrid(char *InputFile)
       while ( 1 )
       { 
           if ( readrow(filerow, 80, inpunit) < 1 ) {
-              fprintf(stderr,"Error reading TimeBit from input file\n");
-              exit(-1);
-          }
+      	  	  fprintf(stderr,"Error reading TimeBit from input file\n");
+      	  	  exit(-1);
+      	  }
           if ( filerow[0] == '#' || rowlen(filerow) < 1 ) continue;
           if ( sscanf(filerow,"%lf",&TimeBit) < 1 ) {
               fprintf(stderr,"Error reading TimeBit from string\n");
-              exit(-1);
-          }
-        printf("TimeBit = %lf\n",TimeBit);
+      	  	  exit(-1);
+      	  }
+		printf("TimeBit = %lf\n",TimeBit);
 
-          break;          
+      	  break;      	  
       }
       
       fclose(inpunit);
@@ -402,20 +402,20 @@ void InitGrid(char *InputFile)
       // Grid allocations
       iv = GenFieldGrid.EX * GenFieldGrid.EY;
       GenFieldGrid.Values = malloc(iv*sizeof(1));
-      if ( GenFieldGrid.Values == NULL ) {
+	  if ( GenFieldGrid.Values == NULL ) {
               fprintf(stderr,"Error allocating GenFieldGrid.Values \n");
-              exit(-1);
-      }
-      iv = ParticleGrid.EX * ParticleGrid.EY;
-      ParticleGrid.Values = malloc(iv*sizeof(1));
-      if ( ParticleGrid.Values == NULL ) {
+      	  	  exit(-1);
+  	  }
+	  iv = ParticleGrid.EX * ParticleGrid.EY;
+  	  ParticleGrid.Values = malloc(iv*sizeof(1));
+	  if ( ParticleGrid.Values == NULL ) {
               fprintf(stderr,"Error allocating ParticleGrid.Values \n");
-              exit(-1);
-      }
+      	  	  exit(-1);
+  	  }
         fprintf(stdout,"GenFieldGrid ");
-        print_i2dGrid(GenFieldGrid);
+		print_i2dGrid(GenFieldGrid);
         fprintf(stdout,"ParticleGrid ");
-        print_i2dGrid(ParticleGrid);
+		print_i2dGrid(ParticleGrid);
 
       return;
 } // end InitGrid
@@ -423,7 +423,7 @@ void InitGrid(char *InputFile)
 
 void GeneratingField(struct i2dGrid *grid, int MaxIt)
 {
-    /*
+	/*
    !  Compute "generating" points 
    !  Output:
    !    *grid.Values 
@@ -463,8 +463,8 @@ void GeneratingField(struct i2dGrid *grid, int MaxIt)
          }  
          if (izmn > iz) izmn=iz;
          if (izmx < iz) izmx=iz;
-         if ( iz >= MaxIt ) iz = 0;
-         grid->Values[index2D(ix,iy,Xdots)] = iz;
+		 if ( iz >= MaxIt ) iz = 0;
+       	 grid->Values[index2D(ix,iy,Xdots)] = iz;
       }
    }
    return;
@@ -472,134 +472,134 @@ void GeneratingField(struct i2dGrid *grid, int MaxIt)
 
 void ParticleGeneration(struct i2dGrid grid, struct i2dGrid pgrid, struct Population *pp)
 {
-    // A system of particles is generated according to the value distribution of 
-    // grid.Values
-    int vmax, vmin, v;
-    int Xdots, Ydots;
-    int ix, iy, np, n;
-    double p;
-    
-    Xdots = grid.EX; Ydots = grid.EY;
-    vmax = MaxIntVal(Xdots*Ydots,grid.Values);
+	// A system of particles is generated according to the value distribution of 
+	// grid.Values
+	int vmax, vmin, v;
+	int Xdots, Ydots;
+	int ix, iy, np, n;
+	double p;
+	
+	Xdots = grid.EX; Ydots = grid.EY;
+	vmax = MaxIntVal(Xdots*Ydots,grid.Values);
     vmin = MinIntVal(Xdots*Ydots,grid.Values);
     
     // Just count number of particles to be generated
     vmin = (double)(1*vmax + 29*vmin) / 30.0;
     np = 0;
     for ( ix = 0; ix < Xdots; ix++ ) {
-        for ( iy = 0; iy < Ydots; iy++ ) {
-            v = grid.Values[index2D(ix,iy,Xdots)];
-            if ( v <= vmax && v >= vmin ) np++;
-        }
-    }
+		for ( iy = 0; iy < Ydots; iy++ ) {
+			v = grid.Values[index2D(ix,iy,Xdots)];
+			if ( v <= vmax && v >= vmin ) np++;
+		}
+	}
 
-    // allocate memory space for particles
-    pp->np = np;
-    pp->weight = malloc(np*sizeof((double)1.0));
-    pp->x = malloc(np*sizeof((double)1.0));
-    pp->y = malloc(np*sizeof((double)1.0));
-    pp->vx = malloc(np*sizeof((double)1.0));
-    pp->vy = malloc(np*sizeof((double)1.0));
+	// allocate memory space for particles
+	pp->np = np;
+	pp->weight = malloc(np*sizeof((double)1.0));
+	pp->x = malloc(np*sizeof((double)1.0));
+	pp->y = malloc(np*sizeof((double)1.0));
+	pp->vx = malloc(np*sizeof((double)1.0));
+	pp->vy = malloc(np*sizeof((double)1.0));
 
-    // Population initialization
-    n = 0;
+	// Population initialization
+	n = 0;
     for ( ix = 0; ix < grid.EX; ix++ ) {
-        for ( iy = 0; iy < grid.EY; iy++ ) {
-            v = grid.Values[index2D(ix,iy,Xdots)];
-            if ( v <= vmax && v >= vmin ) {
-                pp->weight[n] = v*10.0; 
+		for ( iy = 0; iy < grid.EY; iy++ ) {
+			v = grid.Values[index2D(ix,iy,Xdots)];
+			if ( v <= vmax && v >= vmin ) {
+				pp->weight[n] = v*10.0; 
 
-                p = (pgrid.Xe-pgrid.Xs) * ix / (grid.EX * 2.0);
-                pp->x[n] = pgrid.Xs + ((pgrid.Xe-pgrid.Xs)/4.0) + p;
-                
-                p = (pgrid.Ye-pgrid.Ys) * iy / (grid.EY * 2.0);
-                pp->y[n] = pgrid.Ys + ((pgrid.Ye-pgrid.Ys)/4.0) + p;
-                
-                pp->vx[n] = pp->vy[n] = 0.0; // at start particles are still 
+				p = (pgrid.Xe-pgrid.Xs) * ix / (grid.EX * 2.0);
+				pp->x[n] = pgrid.Xs + ((pgrid.Xe-pgrid.Xs)/4.0) + p;
+				
+				p = (pgrid.Ye-pgrid.Ys) * iy / (grid.EY * 2.0);
+				pp->y[n] = pgrid.Ys + ((pgrid.Ye-pgrid.Ys)/4.0) + p;
+				
+				pp->vx[n] = pp->vy[n] = 0.0; // at start particles are still 
 
-                n++; if ( n >= np ) break;
-            }
-        }
-        if ( n >= np ) break;
-    }
-    
-    print_Population(*pp);
+				n++; if ( n >= np ) break;
+			}
+		}
+		if ( n >= np ) break;
+	}
+	
+	print_Population(*pp);
 } // end ParticleGeneration
 
 void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter)
 {
     double *forces;
     double vmin, vmax;
-    struct particle p1, p2;
-    double f[2];
-    int i, j, t;
+	struct particle p1, p2;
+	double f[2];
+	int i, j, t;
 
      // temporary array of forces 
      forces = malloc(2 * pp->np * sizeof((double)1.0));
      if ( forces == NULL ) {
-         fprintf(stderr,"Error mem alloc of forces!\n");
-         exit(1);
-     }
+		 fprintf(stderr,"Error mem alloc of forces!\n");
+		 exit(1);
+	 }
 
-     // compute forces acting on each particle step by step
+	 // compute forces acting on each particle step by step
      for ( t=0; t < mxiter; t++ ) {
-         fprintf(stdout,"Step %d of %d\n",t,mxiter);
-         ParticleScreen(pgrid,*pp,t);
-         // DumpPopulation call frequency may be changed
-         if ( t%4 == 0 ) DumpPopulation(*pp,t);
-         ParticleStats(*pp,t);
+		 fprintf(stdout,"Step %d of %d\n",t,mxiter);
+		 ParticleScreen(pgrid,*pp,t);
+		 // DumpPopulation call frequency may be changed
+		 if ( t%4 == 0 ) DumpPopulation(*pp,t);
+		 ParticleStats(*pp,t);
          for ( i=0; i < 2*pp->np; i++ ) forces[i] = 0.0;
-         for ( i=0; i < pp->np; i++ ) {
+		 for ( i=0; i < pp->np; i++ ) {
             newparticle(&p1,pp->weight[i],pp->x[i],pp->y[i],pp->vx[i],pp->vy[i]);
-            for ( j=0; j < pp->np; j++ ) {
-                if ( j != i ) {
+			for ( j=0; j < pp->np; j++ ) {
+				if ( j != i ) {
                  newparticle(&p2,pp->weight[j],pp->x[j],pp->y[j],pp->vx[j],pp->vy[j]);
-                 ForceCompt(f,p1,p2);
-                 forces[index2D(0,i,2)] = forces[index2D(0,i,2)] + f[0];
-                 forces[index2D(1,i,2)] = forces[index2D(1,i,2)] + f[1];
-                }
-             }           
-         }
-         ComptPopulation(pp,forces);
-     }
-     free(forces);     
+				 ForceCompt(f,p1,p2);
+				 forces[index2D(0,i,2)] = forces[index2D(0,i,2)] + f[0];
+				 forces[index2D(1,i,2)] = forces[index2D(1,i,2)] + f[1];
+				}
+			 }			 
+		 }
+		 ComptPopulation(pp,forces);
+	 }
+	 free(forces);     
      
 }   // end SystemEvolution
 
 void ParticleScreen(struct i2dGrid* pgrid, struct Population pp, int step) 
 {
-    // Distribute a particle population in a grid for visualization purposes
+	// Distribute a particle population in a grid for visualization purposes
 
-    int ix, iy, Xdots, Ydots;
-    int np, n, wp;
-    double rmin, rmax;
-    int static vmin, vmax;
-    double Dx, Dy, wint, wv;
-    char name[40];
-    
-    Xdots = pgrid->EX; Ydots = pgrid->EY;
+	int ix, iy, Xdots, Ydots;
+	int np, n, wp;
+	double rmin, rmax;
+	int static vmin, vmax;
+	double Dx, Dy, wint, wv;
+	char name[40];
+	
+	Xdots = pgrid->EX; Ydots = pgrid->EY;
     for ( ix = 0; ix < Xdots; ix++ ) {
-        for ( iy = 0; iy < Ydots; iy++ ) {
-            pgrid->Values[index2D(ix,iy,Xdots)] = 0;
-        }
-    }
+		for ( iy = 0; iy < Ydots; iy++ ) {
+			pgrid->Values[index2D(ix,iy,Xdots)] = 0;
+		}
+	}
     rmin = MinDoubleVal(pp.np,pp.weight);
     rmax = MaxDoubleVal(pp.np,pp.weight);
     wint = rmax - rmin;
-    Dx = pgrid->Xe - pgrid->Xs; 
-    Dy = pgrid->Ye - pgrid->Ys; 
+	Dx = pgrid->Xe - pgrid->Xs; 
+	Dy = pgrid->Ye - pgrid->Ys; 
     for ( n = 0; n < pp.np; n++ ) {
-        // keep a tiny border free anyway
-        ix = Xdots * pp.x[n] / Dx; if ( ix >= Xdots-1 || ix <= 0 ) continue;
-        iy = Ydots * pp.y[n] / Dy; if ( iy >= Ydots-1 || iy <= 0 ) continue;
-        wv = pp.weight[n] - rmin; wp = 10.0*wv/wint;
-        pgrid->Values[index2D(ix,iy,Xdots)] = wp; 
-        pgrid->Values[index2D(ix-1,iy,Xdots)] = wp;
+		// keep a tiny border free anyway
+		ix = Xdots * pp.x[n] / Dx; if ( ix >= Xdots-1 || ix <= 0 ) continue;
+		iy = Ydots * pp.y[n] / Dy; if ( iy >= Ydots-1 || iy <= 0 ) continue;
+		wv = pp.weight[n] - rmin; wp = 10.0*wv/wint;
+		pgrid->Values[index2D(ix,iy,Xdots)] = wp; 
+ 	    pgrid->Values[index2D(ix-1,iy,Xdots)] = wp;
         pgrid->Values[index2D(ix+1,iy,Xdots)] = wp;
         pgrid->Values[index2D(ix,iy-1,Xdots)] = wp;
-        pgrid->Values[index2D(ix,iy+1,Xdots)] = wp;     
-    }
-    sprintf(name,"stage%3.3d\0",step);
+        pgrid->Values[index2D(ix,iy+1,Xdots)] = wp;	    
+	}
+	sprintf(name,"stage%3.3d\0",step);
     if ( step <= 0 ) { vmin = vmax = 0; }
     IntVal2ppm(pgrid->EX, pgrid->EY, pgrid->Values, &vmin, &vmax, name);
 } // end ParticleScreen
@@ -722,16 +722,16 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char* name)
    */
    ColMap = fopen("ColorMap.txt","r");
    if (ColMap == NULL ) {
-       fprintf(stderr,"Error read opening file ColorMap.txt\n");
-       exit(-1);
+   	   fprintf(stderr,"Error read opening file ColorMap.txt\n");
+   	   exit(-1);
    }
    for (i=0; i < 256; i++) {
-      if ( fscanf(ColMap," %3d %3d %3d",
-             &cm[0][i], &cm[1][i], &cm[2][i]) < 3 ) {
-          fprintf(stderr,"Error reading colour map at line %d: r, g, b =",(i+1));
-          fprintf(stderr," %3.3d %3.3d %3.3d\n",cm[0][i], cm[1][i], cm[2][i]);
-          exit(1);
-      }
+   	  if ( fscanf(ColMap," %3d %3d %3d",
+   	  	     &cm[0][i], &cm[1][i], &cm[2][i]) < 3 ) {
+   	  	  fprintf(stderr,"Error reading colour map at line %d: r, g, b =",(i+1));
+   	  	  fprintf(stderr," %3.3d %3.3d %3.3d\n",cm[0][i], cm[1][i], cm[2][i]);
+   	  	  exit(1);
+   	  }
    }
    /*
       Write on unit 700 with  PPM format
@@ -753,15 +753,15 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char* name)
    if ( (*vmin == *vmax) && (*vmin == 0) ) {
       *vmin = rmin; *vmax = rmax;
    } else {
-      rmin = *vmin;
-      rmax = *vmax;
+  	  rmin = *vmin;
+  	  rmax = *vmax;
    }
    vs = 0;
    for ( i = 0; i < s1; i++ ) {
       for ( j = 0; j < s2; j++ ) {
-         value = idata[i*s2+j];
-         if ( value < rmin ) value = rmin;
-         if ( value > rmax ) value = rmax;
+      	 value = idata[i*s2+j];
+      	 if ( value < rmin ) value = rmin;
+      	 if ( value > rmax ) value = rmax;
          vp = (int) ( (double)(value - rmin) * (double)255.0 / (double)(rmax - rmin) );
          vs++;
          fprintf(ouni," %3.3d %3.3d %3.3d", cm[0][vp], cm[1][vp], cm[2][vp]);
@@ -788,7 +788,7 @@ int main( int argc, char *argv[])    /* FinalApplication */
 {
    struct timespec t0, t1;
    clock_gettime(CLOCK_MONOTONIC_RAW, &t0);
-
+   
    InitGrid("Particles.inp");
 
    // GenFieldGrid initialization
