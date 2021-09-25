@@ -301,7 +301,7 @@ void IntVal2ppm(int s1, int s2, int *idata, int *vmin, int *vmax, char *name);
 
 
 
-__global__ void ComptPopulation(struct Population *p, double *forces_0, double *forces_1, double timebit) {
+__global__ void ComptPopulation(struct Population *p, double *forces, double timebit) {
     /*
      * compute effects of forces on particles in a interval time
      *
@@ -316,11 +316,11 @@ __global__ void ComptPopulation(struct Population *p, double *forces_0, double *
 
     for (i = idx; i < p->np; i+=stridex) {
         p->x[i] = p->x[i] + (p->vx[i] * timebit) +
-                  (0.5 * forces_0[i] * timebit * timebit / p->weight[i]);
-        p->vx[i] = p->vx[i] + forces_0[i] * timebit / p->weight[i];
+                  (0.5 * forces[index2D(0,i,2)] * timebit * timebit / p->weight[i]);
+        p->vx[i] = p->vx[i] + forces[index2D(0,i,2)] * timebit / p->weight[i];
         p->y[i] = p->y[i] + (p->vy[i] * timebit) +
-                  (0.5 * forces_1[i] * timebit * timebit / p->weight[i]);
-        p->vy[i] = p->vy[i] + forces_1[i] * timebit / p->weight[i];
+                  (0.5 * forces[index2D(1,i,2)] * timebit * timebit / p->weight[i]);
+        p->vy[i] = p->vy[i] + forces[index2D(1,i,2)] * timebit / p->weight[i];
     }
 }
 
@@ -693,7 +693,7 @@ void ParticleGeneration(struct i2dGrid *grid, struct i2dGrid *pgrid, struct Popu
 
 
 
-__global__ void SystemInstantEvolution(struct Population *pp, double *forces_0, double *forces_1) {
+__global__ void SystemInstantEvolution(struct Population *pp, double *forces) {
 
     int i, j;
     //variables to compute force between p1 and p2
@@ -718,8 +718,8 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces_0, 
                 f1_tot += force * dy / sqrt(d2);
             }
         }
-        forces_0[i] = f0_tot;
-        forces_1[i] = f1_tot;
+        forces[index2D(0,i,2)] = f0_tot;
+        forces[index2D(1,i,2)] = f1_tot;
     }
     return;
 }
@@ -729,10 +729,8 @@ __global__ void SystemInstantEvolution(struct Population *pp, double *forces_0, 
 void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, double timebit) {
     int t;
 
-    double *g_forces_0;
-    double *g_forces_1;
-    cudaMalloc(&g_forces_0, pp->np * sizeof(double));
-    cudaMalloc(&g_forces_1, pp->np * sizeof(double));
+    double *g_forces;
+    cudaMalloc(&g_forces, 2 * pp->np * sizeof(double));
 
     Population *pp_dev;
     double *temp_dev, *weight_temp, *x_temp, *y_temp, *vx_temp, *vy_temp;
@@ -813,10 +811,10 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         cudaMemcpy(vy_temp, pp->vy, pp->np * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(&(pp_dev->vy), &vy_temp, sizeof(double *), cudaMemcpyHostToDevice);
 
-        SystemInstantEvolution<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces_0, g_forces_1);
+        SystemInstantEvolution<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces);
         cudaDeviceSynchronize();
 
-        ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces_0, g_forces_1, timebit);
+        ComptPopulation<<<number_of_blocks_uni, threads_per_block_uni>>>(pp_dev, g_forces, timebit);
         cudaDeviceSynchronize();
 
 
@@ -841,8 +839,7 @@ void SystemEvolution(struct i2dGrid *pgrid, struct Population *pp, int mxiter, d
         cudaMemcpy(pp->vy, temp_dev, pp->np * sizeof(double), cudaMemcpyDeviceToHost);
     }
 
-    cudaFree(g_forces_0);
-    cudaFree(g_forces_1);
+    cudaFree(g_forces);
     cudaFree(pp_dev);
     cudaFree(weight_temp);
     cudaFree(weights_dev);
