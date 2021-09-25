@@ -263,7 +263,7 @@ void ParticleStats(struct Population * p, int t) {
     int n_threads = sqrt(p->np);  // minimum for x + N/x
     if (n_threads > SHARED_MEM_MAX_THREADS)
         n_threads = SHARED_MEM_MAX_THREADS;
-    ParallelComputeStats<<<1, n_threads>>>(p_dev, stats_dev);
+    ParallelComputeStats<<<1, n_threads>>>(p_dev, stats_dev);  // shared memory only works in the same block
     cudaDeviceSynchronize();
 
     cudaMemcpy(returns, stats_dev, 5 * sizeof(double), cudaMemcpyDeviceToHost);
